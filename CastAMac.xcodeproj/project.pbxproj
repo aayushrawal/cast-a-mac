@@ -1,0 +1,275 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		100000000000000000000001 /* CastClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* CastClientApp.swift */; };
+		100000000000000000000002 /* ClientSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* ClientSessionModel.swift */; };
+		100000000000000000000003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* ContentView.swift */; };
+		100000000000000000000004 /* RemoteDesktopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* RemoteDesktopView.swift */; };
+		100000000000000000000005 /* MetalVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000005 /* MetalVideoView.swift */; };
+		100000000000000000000006 /* CastMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 900000000000000000000001 /* CastMedia */; };
+		100000000000000000000007 /* CastTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 900000000000000000000002 /* CastTransport */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		200000000000000000000001 /* CastClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastClientApp.swift; sourceTree = "<group>"; };
+		200000000000000000000002 /* ClientSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientSessionModel.swift; sourceTree = "<group>"; };
+		200000000000000000000003 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		200000000000000000000004 /* RemoteDesktopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteDesktopView.swift; sourceTree = "<group>"; };
+		200000000000000000000005 /* MetalVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalVideoView.swift; sourceTree = "<group>"; };
+		200000000000000000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		200000000000000000000007 /* Cast-a-mac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cast-a-mac.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		300000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000006 /* CastMedia in Frameworks */,
+				100000000000000000000007 /* CastTransport in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		400000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				400000000000000000000002 /* CastClient */,
+				400000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		400000000000000000000002 /* CastClient */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000001 /* CastClientApp.swift */,
+				200000000000000000000002 /* ClientSessionModel.swift */,
+				200000000000000000000003 /* ContentView.swift */,
+				200000000000000000000004 /* RemoteDesktopView.swift */,
+				200000000000000000000005 /* MetalVideoView.swift */,
+				200000000000000000000006 /* Info.plist */,
+			);
+			path = Apps/CastClient;
+			sourceTree = SOURCE_ROOT;
+		};
+		400000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000007 /* Cast-a-mac.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		500000000000000000000001 /* CastClient */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 800000000000000000000002 /* Build configuration list for PBXNativeTarget "CastClient" */;
+			buildPhases = (
+				600000000000000000000001 /* Sources */,
+				300000000000000000000001 /* Frameworks */,
+				600000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CastClient;
+			packageProductDependencies = (
+				900000000000000000000001 /* CastMedia */,
+				900000000000000000000002 /* CastTransport */,
+			);
+			productName = CastClient;
+			productReference = 200000000000000000000007 /* Cast-a-mac.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		700000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					500000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+				};
+			};
+			buildConfigurationList = 800000000000000000000001 /* Build configuration list for PBXProject "CastAMac" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 400000000000000000000001;
+			packageReferences = (
+				A00000000000000000000001 /* XCLocalSwiftPackageReference "." */,
+			);
+			productRefGroup = 400000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				500000000000000000000001 /* CastClient */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		600000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		600000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000001 /* CastClientApp.swift in Sources */,
+				100000000000000000000002 /* ClientSessionModel.swift in Sources */,
+				100000000000000000000003 /* ContentView.swift in Sources */,
+				100000000000000000000004 /* RemoteDesktopView.swift in Sources */,
+				100000000000000000000005 /* MetalVideoView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		B00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		B00000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Apps/CastClient/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.castamac.client;
+				PRODUCT_NAME = "Cast-a-mac";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+		B00000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Apps/CastClient/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.castamac.client;
+				PRODUCT_NAME = "Cast-a-mac";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		800000000000000000000001 /* Build configuration list for PBXProject "CastAMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000001 /* Debug */,
+				B00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		800000000000000000000002 /* Build configuration list for PBXNativeTarget "CastClient" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000003 /* Debug */,
+				B00000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A00000000000000000000001 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ".";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		900000000000000000000001 /* CastMedia */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A00000000000000000000001 /* XCLocalSwiftPackageReference "." */;
+			productName = CastMedia;
+		};
+		900000000000000000000002 /* CastTransport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A00000000000000000000001 /* XCLocalSwiftPackageReference "." */;
+			productName = CastTransport;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 700000000000000000000001 /* Project object */;
+}
