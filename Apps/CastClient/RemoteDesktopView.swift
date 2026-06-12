@@ -19,13 +19,17 @@ struct RemoteDesktopView: View {
     @State private var controlsHideGeneration = UUID()
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        GeometryReader { geometry in
+            ZStack {
+                Color.black
 
-            if let frame {
-                MetalVideoView(pixelBuffer: frame)
-                    .ignoresSafeArea()
-                    .overlay {
+                if let frame {
+                    MetalVideoView(pixelBuffer: frame)
+                        .frame(
+                            width: geometry.size.width,
+                            height: geometry.size.height
+                        )
+                        .overlay {
                         RemoteInputOverlay(
                             videoSize: CGSize(
                                 width: CVPixelBufferGetWidth(frame),
@@ -39,53 +43,76 @@ struct RemoteDesktopView: View {
                             sendText: sendText,
                             sendKey: sendKey,
                             keyboardIsActive: keyboardIsActive,
-                            topEdgeActivity: revealControls
+                            controlsVisible: controlsVisible,
+                            cornerActivity: revealControls
                         )
                     }
-            } else {
-                VStack(spacing: 14) {
-                    ProgressView()
-                        .tint(.white)
-                    Text("Waiting for video from \(macName)")
-                        .foregroundStyle(.white)
+                } else {
+                    VStack(spacing: 14) {
+                        ProgressView()
+                            .tint(.white)
+                        Text("Waiting for video from \(macName)")
+                            .foregroundStyle(.white)
+                    }
                 }
-            }
 
-            if controlsVisible {
-                VStack {
-                    HStack {
-                        Label(macName, systemImage: "lock.fill")
-                            .font(.subheadline.weight(.semibold))
+                if controlsVisible {
+                    VStack {
+                        HStack {
+                            Label(macName, systemImage: "lock.fill")
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Button {
+                                keyboardIsActive.toggle()
+                                revealControls()
+                            } label: {
+                                Label(
+                                    keyboardIsActive ? "Hide Keyboard" : "Keyboard",
+                                    systemImage: "keyboard"
+                                )
+                            }
+                            .buttonStyle(.bordered)
+                            Button("Disconnect", role: .destructive, action: disconnect)
+                                .buttonStyle(.borderedProminent)
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial)
+                        .onHover { hovering in
+                            if hovering {
+                                revealControls()
+                            }
+                        }
+
                         Spacer()
-                        Button {
-                            keyboardIsActive.toggle()
-                            revealControls()
-                        } label: {
-                            Label(
-                                keyboardIsActive ? "Hide Keyboard" : "Keyboard",
-                                systemImage: "keyboard"
-                            )
-                        }
-                        .buttonStyle(.bordered)
-                        Button("Disconnect", role: .destructive, action: disconnect)
-                            .buttonStyle(.borderedProminent)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 10)
-                    .background(.ultraThinMaterial)
-                    .onHover { hovering in
-                        if hovering {
-                            revealControls()
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                } else {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button(action: revealControls) {
+                                Image(systemName: "chevron.down")
+                                    .font(.caption.weight(.bold))
+                                    .frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.plain)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .accessibilityLabel("Show remote controls")
                         }
+                        Spacer()
                     }
-
-                    Spacer()
+                    .padding(6)
                 }
-                .transition(.move(edge: .top).combined(with: .opacity))
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .ignoresSafeArea()
         .animation(.easeInOut(duration: 0.2), value: controlsVisible)
         .onAppear(perform: revealControls)
+        .accessibilityAction(named: Text("Show remote controls")) {
+            revealControls()
+        }
         .persistentSystemOverlays(.hidden)
     }
 
@@ -114,7 +141,8 @@ private struct RemoteInputOverlay: UIViewRepresentable {
     let sendText: (String) -> Void
     let sendKey: (UInt16, Bool) -> Void
     let keyboardIsActive: Bool
-    let topEdgeActivity: () -> Void
+    let controlsVisible: Bool
+    let cornerActivity: () -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -191,15 +219,17 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         }
 
         @objc func tap(_ recognizer: UITapGestureRecognizer) {
-            reportTopEdgeActivity(at: recognizer.location(in: recognizer.view))
-            guard let point = normalizedPoint(recognizer.location(in: recognizer.view)) else {
+            let location = recognizer.location(in: recognizer.view)
+            if reportCornerActivity(at: location) {
+                return
+            }
+            guard let point = normalizedPoint(location) else {
                 return
             }
             parent.click(point.x, point.y)
         }
 
         @objc func drag(_ recognizer: UIPanGestureRecognizer) {
-            reportTopEdgeActivity(at: recognizer.location(in: recognizer.view))
             guard let point = normalizedPoint(recognizer.location(in: recognizer.view)) else {
                 return
             }
@@ -224,7 +254,6 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         }
 
         @objc func rightClick(_ recognizer: UILongPressGestureRecognizer) {
-            reportTopEdgeActivity(at: recognizer.location(in: recognizer.view))
             guard recognizer.state == .began,
                   let point = normalizedPoint(recognizer.location(in: recognizer.view)) else {
                 return
@@ -236,12 +265,19 @@ private struct RemoteInputOverlay: UIViewRepresentable {
             guard recognizer.state == .began || recognizer.state == .changed else {
                 return
             }
-            reportTopEdgeActivity(at: recognizer.location(in: recognizer.view))
+            _ = reportCornerActivity(at: recognizer.location(in: recognizer.view))
         }
 
-        private func reportTopEdgeActivity(at point: CGPoint) {
-            guard point.y <= 72 else { return }
-            parent.topEdgeActivity()
+        @discardableResult
+        private func reportCornerActivity(at point: CGPoint) -> Bool {
+            guard let view = gestureView,
+                  !parent.controlsVisible,
+                  point.x >= view.bounds.maxX - 64,
+                  point.y <= view.bounds.minY + 64 else {
+                return false
+            }
+            parent.cornerActivity()
+            return true
         }
 
         private func normalizedPoint(_ point: CGPoint) -> (x: Double, y: Double)? {
