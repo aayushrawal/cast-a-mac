@@ -3,5 +3,7 @@
 .swiftpm/
 DerivedData/
 dist/
+Assets/CastAMac.icns
+Assets/CastAMac.iconset/
 *.xcuserstate
 xcuserdata/
