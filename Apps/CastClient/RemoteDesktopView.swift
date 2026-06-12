@@ -285,7 +285,7 @@ private struct RemoteInputOverlay: UIViewRepresentable {
                   parent.videoSize.height > 0 else {
                 return nil
             }
-            let scale = max(
+            let scale = min(
                 view.bounds.width / parent.videoSize.width,
                 view.bounds.height / parent.videoSize.height
             )
@@ -299,9 +299,12 @@ private struct RemoteInputOverlay: UIViewRepresentable {
                 width: size.width,
                 height: size.height
             )
+            guard rect.contains(point) else {
+                return nil
+            }
             return (
-                min(max(Double((point.x - rect.minX) / rect.width), 0), 1),
-                min(max(Double((point.y - rect.minY) / rect.height), 0), 1)
+                Double((point.x - rect.minX) / rect.width),
+                Double((point.y - rect.minY) / rect.height)
             )
         }
 
