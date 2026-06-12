@@ -25,12 +25,11 @@ host app. The Mac does not need to be physically near the iPad. Remote wake is
 not dependable across arbitrary internet connections, so wake-on-demand is not
 an MVP promise.
 
-The prototype host prevents idle system sleep while it is running, but it still
-allows the physical panel to turn dark. Streaming normally continues during
-display sleep as long as macOS keeps that display active. A closed-lid MacBook
-or a headless Mac may stop rendering the physical display; reliable operation
-in that state requires an attached display, a display-emulator adapter, or a
-future virtual-display implementation.
+The prototype host prevents idle display sleep while it is running because
+ScreenCaptureKit can stop delivering frames when the physical display turns
+off. A closed-lid MacBook, a headless Mac, or a Mac whose panel must remain dark
+requires an attached display-emulator adapter or a future virtual-display
+implementation.
 
 ### iPad client
 

@@ -4,6 +4,7 @@ import CastTransport
 import CoreMedia
 import CoreVideo
 import Foundation
+import CoreGraphics
 import ScreenCaptureKit
 
 final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
@@ -22,7 +23,14 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
     }
 
     func start() async throws {
-        powerAssertion = try HostPowerAssertion()
+        guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
+            throw HostError.screenRecordingPermissionDenied
+        }
+        do {
+            powerAssertion = try HostPowerAssertion()
+        } catch {
+            fputs("Warning: could not prevent idle sleep: \(error)\n", stderr)
+        }
         let content = try await SCShareableContent.current
         guard let display = content.displays.first else {
             throw HostError.noDisplays
@@ -135,7 +143,21 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
     }
 }
 
-enum HostError: Error {
+enum HostError: LocalizedError {
     case noDisplays
+    case screenRecordingPermissionDenied
+
+    var errorDescription: String? {
+        switch self {
+        case .noDisplays:
+            "No active Mac display is available to capture."
+        case .screenRecordingPermissionDenied:
+            """
+            Screen Recording permission is denied. Open System Settings > \
+            Privacy & Security > Screen & System Audio Recording, enable the \
+            terminal app running cast-host, then quit and reopen that terminal.
+            """
+        }
+    }
 }
 #endif

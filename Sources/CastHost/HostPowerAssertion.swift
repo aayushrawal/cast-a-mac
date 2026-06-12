@@ -7,9 +7,9 @@ final class HostPowerAssertion {
 
     init() throws {
         let result = IOPMAssertionCreateWithName(
-            "PreventUserIdleSystemSleep" as CFString,
+            "PreventUserIdleDisplaySleep" as CFString,
             IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            "Cast-a-mac is serving a remote session" as CFString,
+            "Cast-a-mac is capturing the active display" as CFString,
             &assertionID
         )
         guard result == kIOReturnSuccess else {
