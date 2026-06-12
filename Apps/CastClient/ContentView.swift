@@ -32,7 +32,8 @@ struct ContentView: View {
                 click: session.click,
                 rightClick: session.rightClick,
                 scroll: session.scroll,
-                sendText: session.sendText
+                sendText: session.sendText,
+                sendKey: session.sendKey
             )
         case .connecting(let name):
             ConnectionProgressView(macName: name)

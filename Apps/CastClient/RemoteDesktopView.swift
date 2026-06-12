@@ -12,9 +12,9 @@ struct RemoteDesktopView: View {
     let rightClick: (Double, Double) -> Void
     let scroll: (Double, Double) -> Void
     let sendText: (String) -> Void
+    let sendKey: (UInt16, Bool) -> Void
 
-    @State private var showsKeyboard = false
-    @State private var text = ""
+    @State private var keyboardIsActive = false
 
     var body: some View {
         ZStack {
@@ -33,7 +33,10 @@ struct RemoteDesktopView: View {
                             setPrimaryButton: setPrimaryButton,
                             click: click,
                             rightClick: rightClick,
-                            scroll: scroll
+                            scroll: scroll,
+                            sendText: sendText,
+                            sendKey: sendKey,
+                            keyboardIsActive: keyboardIsActive
                         )
                     }
             } else {
@@ -51,9 +54,12 @@ struct RemoteDesktopView: View {
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Button {
-                    showsKeyboard = true
+                    keyboardIsActive.toggle()
                 } label: {
-                    Label("Keyboard", systemImage: "keyboard")
+                    Label(
+                        keyboardIsActive ? "Hide Keyboard" : "Keyboard",
+                        systemImage: "keyboard"
+                    )
                 }
                 .buttonStyle(.bordered)
                 Button("Disconnect", role: .destructive, action: disconnect)
@@ -64,32 +70,6 @@ struct RemoteDesktopView: View {
             .background(.ultraThinMaterial)
         }
         .persistentSystemOverlays(.hidden)
-        .sheet(isPresented: $showsKeyboard) {
-            NavigationStack {
-                Form {
-                    TextField("Text to type on the Mac", text: $text, axis: .vertical)
-                        .lineLimit(3...8)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-                .navigationTitle("Remote Keyboard")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Close") {
-                            showsKeyboard = false
-                        }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Send") {
-                            sendText(text)
-                            text = ""
-                        }
-                        .disabled(text.isEmpty)
-                    }
-                }
-            }
-            .presentationDetents([.medium])
-        }
     }
 }
 
@@ -100,15 +80,24 @@ private struct RemoteInputOverlay: UIViewRepresentable {
     let click: (Double, Double) -> Void
     let rightClick: (Double, Double) -> Void
     let scroll: (Double, Double) -> Void
+    let sendText: (String) -> Void
+    let sendKey: (UInt16, Bool) -> Void
+    let keyboardIsActive: Bool
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> RemoteInputView {
+        let view = RemoteInputView()
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
+        view.onInsertText = { [weak coordinator = context.coordinator] text in
+            coordinator?.parent.sendText(text)
+        }
+        view.onDeleteBackward = { [weak coordinator = context.coordinator] in
+            coordinator?.sendKeyPress(keyCode: 51)
+        }
 
         let tap = UITapGestureRecognizer(
             target: context.coordinator,
@@ -141,8 +130,15 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ view: UIView, context: Context) {
+    func updateUIView(_ view: RemoteInputView, context: Context) {
         context.coordinator.parent = self
+        if keyboardIsActive, !view.isFirstResponder {
+            DispatchQueue.main.async {
+                view.becomeFirstResponder()
+            }
+        } else if !keyboardIsActive, view.isFirstResponder {
+            view.resignFirstResponder()
+        }
     }
 
     final class Coordinator: NSObject {
@@ -150,6 +146,11 @@ private struct RemoteInputOverlay: UIViewRepresentable {
 
         init(parent: RemoteInputOverlay) {
             self.parent = parent
+        }
+
+        func sendKeyPress(keyCode: UInt16) {
+            parent.sendKey(keyCode, true)
+            parent.sendKey(keyCode, false)
         }
 
         @objc func tap(_ recognizer: UITapGestureRecognizer) {
@@ -222,5 +223,51 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         fileprivate func setGestureView(_ view: UIView) {
             gestureView = view
         }
+    }
+}
+
+private final class RemoteInputView: UIView, UIKeyInput {
+    var onInsertText: ((String) -> Void)?
+    var onDeleteBackward: (() -> Void)?
+
+    override var canBecomeFirstResponder: Bool {
+        true
+    }
+
+    var hasText: Bool {
+        true
+    }
+
+    func insertText(_ text: String) {
+        onInsertText?(text)
+    }
+
+    func deleteBackward() {
+        onDeleteBackward?()
+    }
+
+    var autocorrectionType: UITextAutocorrectionType {
+        get { .no }
+        set {}
+    }
+
+    var autocapitalizationType: UITextAutocapitalizationType {
+        get { .none }
+        set {}
+    }
+
+    var smartDashesType: UITextSmartDashesType {
+        get { .no }
+        set {}
+    }
+
+    var smartQuotesType: UITextSmartQuotesType {
+        get { .no }
+        set {}
+    }
+
+    var smartInsertDeleteType: UITextSmartInsertDeleteType {
+        get { .no }
+        set {}
     }
 }

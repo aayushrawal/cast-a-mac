@@ -75,6 +75,20 @@ public final class LANVideoReceiver: @unchecked Sendable {
         sendInput(.text(text))
     }
 
+    public func sendKey(
+        keyCode: UInt16,
+        isPressed: Bool,
+        modifiers: KeyModifiers = []
+    ) {
+        sendInput(
+            .key(
+                keyCode: keyCode,
+                isPressed: isPressed,
+                modifiers: modifiers
+            )
+        )
+    }
+
     private func sendInput(_ event: InputEvent) {
         sequenceLock.lock()
         sequenceNumber &+= 1

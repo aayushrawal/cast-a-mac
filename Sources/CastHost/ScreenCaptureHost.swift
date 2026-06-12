@@ -49,6 +49,20 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
         let configuration = SCStreamConfiguration()
         configuration.width = dimensions.width
         configuration.height = dimensions.height
+        configuration.sourceRect = CGRect(
+            x: 0,
+            y: 0,
+            width: display.width,
+            height: display.height
+        )
+        configuration.destinationRect = CGRect(
+            x: 0,
+            y: 0,
+            width: dimensions.width,
+            height: dimensions.height
+        )
+        configuration.scalesToFit = true
+        configuration.preservesAspectRatio = false
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 60)
         configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         configuration.queueDepth = 3

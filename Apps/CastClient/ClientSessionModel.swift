@@ -116,4 +116,8 @@ final class ClientSessionModel: ObservableObject {
     func sendText(_ text: String) {
         receiver?.sendText(text)
     }
+
+    func sendKey(keyCode: UInt16, isPressed: Bool) {
+        receiver?.sendKey(keyCode: keyCode, isPressed: isPressed)
+    }
 }
