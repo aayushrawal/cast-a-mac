@@ -15,6 +15,8 @@ struct RemoteDesktopView: View {
     let sendKey: (UInt16, Bool) -> Void
 
     @State private var keyboardIsActive = false
+    @State private var controlsVisible = true
+    @State private var controlsHideGeneration = UUID()
 
     var body: some View {
         ZStack {
@@ -36,7 +38,8 @@ struct RemoteDesktopView: View {
                             scroll: scroll,
                             sendText: sendText,
                             sendKey: sendKey,
-                            keyboardIsActive: keyboardIsActive
+                            keyboardIsActive: keyboardIsActive,
+                            topEdgeActivity: revealControls
                         )
                     }
             } else {
@@ -47,29 +50,57 @@ struct RemoteDesktopView: View {
                         .foregroundStyle(.white)
                 }
             }
-        }
-        .safeAreaInset(edge: .top) {
-            HStack {
-                Label(macName, systemImage: "lock.fill")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Button {
-                    keyboardIsActive.toggle()
-                } label: {
-                    Label(
-                        keyboardIsActive ? "Hide Keyboard" : "Keyboard",
-                        systemImage: "keyboard"
-                    )
+
+            if controlsVisible {
+                VStack {
+                    HStack {
+                        Label(macName, systemImage: "lock.fill")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Button {
+                            keyboardIsActive.toggle()
+                            revealControls()
+                        } label: {
+                            Label(
+                                keyboardIsActive ? "Hide Keyboard" : "Keyboard",
+                                systemImage: "keyboard"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        Button("Disconnect", role: .destructive, action: disconnect)
+                            .buttonStyle(.borderedProminent)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 10)
+                    .background(.ultraThinMaterial)
+                    .onHover { hovering in
+                        if hovering {
+                            revealControls()
+                        }
+                    }
+
+                    Spacer()
                 }
-                .buttonStyle(.bordered)
-                Button("Disconnect", role: .destructive, action: disconnect)
-                    .buttonStyle(.borderedProminent)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
-            .padding(.horizontal)
-            .padding(.vertical, 10)
-            .background(.ultraThinMaterial)
         }
+        .animation(.easeInOut(duration: 0.2), value: controlsVisible)
+        .onAppear(perform: revealControls)
         .persistentSystemOverlays(.hidden)
+    }
+
+    private func revealControls() {
+        controlsVisible = true
+        let generation = UUID()
+        controlsHideGeneration = generation
+        Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            guard controlsHideGeneration == generation,
+                  !keyboardIsActive else {
+                return
+            }
+            controlsVisible = false
+        }
     }
 }
 
@@ -83,6 +114,7 @@ private struct RemoteInputOverlay: UIViewRepresentable {
     let sendText: (String) -> Void
     let sendKey: (UInt16, Bool) -> Void
     let keyboardIsActive: Bool
+    let topEdgeActivity: () -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -120,6 +152,10 @@ private struct RemoteInputOverlay: UIViewRepresentable {
             action: #selector(Coordinator.rightClick(_:))
         )
         rightClick.minimumPressDuration = 0.45
+        let hover = UIHoverGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.hover(_:))
+        )
 
         tap.require(toFail: drag)
         context.coordinator.setGestureView(view)
@@ -127,6 +163,7 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         view.addGestureRecognizer(drag)
         view.addGestureRecognizer(scrollGesture)
         view.addGestureRecognizer(rightClick)
+        view.addGestureRecognizer(hover)
         return view
     }
 
@@ -154,6 +191,7 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         }
 
         @objc func tap(_ recognizer: UITapGestureRecognizer) {
+            reportTopEdgeActivity(at: recognizer.location(in: recognizer.view))
             guard let point = normalizedPoint(recognizer.location(in: recognizer.view)) else {
                 return
             }
@@ -161,6 +199,7 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         }
 
         @objc func drag(_ recognizer: UIPanGestureRecognizer) {
+            reportTopEdgeActivity(at: recognizer.location(in: recognizer.view))
             guard let point = normalizedPoint(recognizer.location(in: recognizer.view)) else {
                 return
             }
@@ -185,6 +224,7 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         }
 
         @objc func rightClick(_ recognizer: UILongPressGestureRecognizer) {
+            reportTopEdgeActivity(at: recognizer.location(in: recognizer.view))
             guard recognizer.state == .began,
                   let point = normalizedPoint(recognizer.location(in: recognizer.view)) else {
                 return
@@ -192,12 +232,24 @@ private struct RemoteInputOverlay: UIViewRepresentable {
             parent.rightClick(point.x, point.y)
         }
 
+        @objc func hover(_ recognizer: UIHoverGestureRecognizer) {
+            guard recognizer.state == .began || recognizer.state == .changed else {
+                return
+            }
+            reportTopEdgeActivity(at: recognizer.location(in: recognizer.view))
+        }
+
+        private func reportTopEdgeActivity(at point: CGPoint) {
+            guard point.y <= 72 else { return }
+            parent.topEdgeActivity()
+        }
+
         private func normalizedPoint(_ point: CGPoint) -> (x: Double, y: Double)? {
             guard let view = gestureView, parent.videoSize.width > 0,
                   parent.videoSize.height > 0 else {
                 return nil
             }
-            let scale = min(
+            let scale = max(
                 view.bounds.width / parent.videoSize.width,
                 view.bounds.height / parent.videoSize.height
             )
@@ -211,10 +263,9 @@ private struct RemoteInputOverlay: UIViewRepresentable {
                 width: size.width,
                 height: size.height
             )
-            guard rect.contains(point) else { return nil }
             return (
-                Double((point.x - rect.minX) / rect.width),
-                Double((point.y - rect.minY) / rect.height)
+                min(max(Double((point.x - rect.minX) / rect.width), 0), 1),
+                min(max(Double((point.y - rect.minY) / rect.height), 0), 1)
             )
         }
 

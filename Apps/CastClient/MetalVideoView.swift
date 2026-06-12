@@ -16,7 +16,7 @@ struct MetalVideoView: UIViewRepresentable {
         view.enableSetNeedsDisplay = true
         view.isPaused = true
         view.autoResizeDrawable = true
-        view.contentMode = .scaleAspectFit
+        view.contentMode = .scaleAspectFill
         context.coordinator.attach(to: view)
         return view
     }
@@ -51,7 +51,7 @@ struct MetalVideoView: UIViewRepresentable {
             let image = CIImage(cvPixelBuffer: pixelBuffer)
             let source = image.extent
             let destination = CGRect(origin: .zero, size: view.drawableSize)
-            let scale = min(
+            let scale = max(
                 destination.width / source.width,
                 destination.height / source.height
             )

@@ -4,13 +4,30 @@ struct ContentView: View {
     @StateObject private var session = ClientSessionModel()
 
     var body: some View {
-        NavigationSplitView {
-            MacListView(session: session)
-                .navigationTitle("Cast-a-mac")
-        } detail: {
-            detail
+        Group {
+            if case .connected(let name) = session.connectionState {
+                RemoteDesktopView(
+                    macName: name,
+                    frame: session.latestFrame,
+                    disconnect: session.disconnect,
+                    movePointer: session.movePointer,
+                    setPrimaryButton: session.setPrimaryButton,
+                    click: session.click,
+                    rightClick: session.rightClick,
+                    scroll: session.scroll,
+                    sendText: session.sendText,
+                    sendKey: session.sendKey
+                )
+            } else {
+                NavigationSplitView {
+                    MacListView(session: session)
+                        .navigationTitle("Cast-a-mac")
+                } detail: {
+                    detail
+                }
+                .navigationSplitViewStyle(.balanced)
+            }
         }
-        .navigationSplitViewStyle(.balanced)
         .task {
             session.startBrowsing()
         }
@@ -22,19 +39,8 @@ struct ContentView: View {
     @ViewBuilder
     private var detail: some View {
         switch session.connectionState {
-        case .connected(let name):
-            RemoteDesktopView(
-                macName: name,
-                frame: session.latestFrame,
-                disconnect: session.disconnect,
-                movePointer: session.movePointer,
-                setPrimaryButton: session.setPrimaryButton,
-                click: session.click,
-                rightClick: session.rightClick,
-                scroll: session.scroll,
-                sendText: session.sendText,
-                sendKey: session.sendKey
-            )
+        case .connected:
+            EmptyView()
         case .connecting(let name):
             ConnectionProgressView(macName: name)
         case .failed(let message):
