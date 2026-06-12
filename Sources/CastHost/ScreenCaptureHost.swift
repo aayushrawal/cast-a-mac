@@ -13,6 +13,7 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
     private var stream: SCStream?
     private var encoder: H264Encoder?
     private var inputController: RemoteInputController?
+    private var powerAssertion: HostPowerAssertion?
 
     init(port: UInt16) throws {
         broadcaster = try LANVideoBroadcaster(port: port)
@@ -21,6 +22,7 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
     }
 
     func start() async throws {
+        powerAssertion = try HostPowerAssertion()
         let content = try await SCShareableContent.current
         guard let display = content.displays.first else {
             throw HostError.noDisplays
@@ -87,6 +89,7 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
         broadcaster.stop()
         stream = nil
         encoder = nil
+        powerAssertion = nil
     }
 
     func stream(

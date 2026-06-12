@@ -36,6 +36,7 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("CoreMedia"),
                 .linkedFramework("CoreVideo"),
+                .linkedFramework("IOKit"),
                 .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("VideoToolbox")
             ]
