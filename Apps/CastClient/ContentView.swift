@@ -26,7 +26,13 @@ struct ContentView: View {
             RemoteDesktopView(
                 macName: name,
                 frame: session.latestFrame,
-                disconnect: session.disconnect
+                disconnect: session.disconnect,
+                movePointer: session.movePointer,
+                setPrimaryButton: session.setPrimaryButton,
+                click: session.click,
+                rightClick: session.rightClick,
+                scroll: session.scroll,
+                sendText: session.sendText
             )
         case .connecting(let name):
             ConnectionProgressView(macName: name)
@@ -84,10 +90,7 @@ private struct MacListView: View {
                 }
 
                 if session.showsInternetPreview {
-                    Text(
-                        "Account-linked Macs will appear here when internet "
-                            + "presence and secure pairing are enabled."
-                    )
+                    Text(session.internetStatus)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }

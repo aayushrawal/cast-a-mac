@@ -17,6 +17,8 @@ final class ClientSessionModel: ObservableObject {
     @Published private(set) var connectionState: ConnectionState = .browsing
     @Published private(set) var latestFrame: CVPixelBuffer?
     @Published var showsInternetPreview = false
+    @Published private(set) var internetStatus =
+        "Internet connections need the Cast-a-mac account and relay service."
 
     private let discovery = LANHostDiscovery()
     private var receiver: LANVideoReceiver?
@@ -82,5 +84,36 @@ final class ClientSessionModel: ObservableObject {
         decoder = nil
         latestFrame = nil
         connectionState = .browsing
+    }
+
+    func movePointer(x: Double, y: Double) {
+        receiver?.movePointer(x: x, y: y)
+    }
+
+    func setPrimaryButton(isPressed: Bool, x: Double, y: Double) {
+        receiver?.setPointerButton(
+            .primary,
+            isPressed: isPressed,
+            x: x,
+            y: y
+        )
+    }
+
+    func rightClick(x: Double, y: Double) {
+        receiver?.setPointerButton(.secondary, isPressed: true, x: x, y: y)
+        receiver?.setPointerButton(.secondary, isPressed: false, x: x, y: y)
+    }
+
+    func click(x: Double, y: Double) {
+        setPrimaryButton(isPressed: true, x: x, y: y)
+        setPrimaryButton(isPressed: false, x: x, y: y)
+    }
+
+    func scroll(deltaX: Double, deltaY: Double) {
+        receiver?.scroll(deltaX: deltaX, deltaY: deltaY)
+    }
+
+    func sendText(_ text: String) {
+        receiver?.sendText(text)
     }
 }

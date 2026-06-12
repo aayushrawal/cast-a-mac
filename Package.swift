@@ -25,14 +25,14 @@ let package = Package(
         ),
         .target(
             name: "CastTransport",
-            dependencies: ["CastMedia"],
+            dependencies: ["CastCore", "CastMedia"],
             linkerSettings: [
                 .linkedFramework("Network")
             ]
         ),
         .executableTarget(
             name: "CastHost",
-            dependencies: ["CastMedia", "CastTransport"],
+            dependencies: ["CastCore", "CastMedia", "CastTransport"],
             linkerSettings: [
                 .linkedFramework("CoreMedia"),
                 .linkedFramework("CoreVideo"),

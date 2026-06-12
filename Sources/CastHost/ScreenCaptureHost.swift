@@ -1,3 +1,4 @@
+#if os(macOS)
 import CastMedia
 import CastTransport
 import CoreMedia
@@ -11,6 +12,7 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
     private let broadcaster: LANVideoBroadcaster
     private var stream: SCStream?
     private var encoder: H264Encoder?
+    private var inputController: RemoteInputController?
 
     init(port: UInt16) throws {
         broadcaster = try LANVideoBroadcaster(port: port)
@@ -23,15 +25,23 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
         guard let display = content.displays.first else {
             throw HostError.noDisplays
         }
+        RemoteInputController.requestAccessibilityPermission()
+        let inputController = RemoteInputController(displayID: display.displayID)
+        self.inputController = inputController
+        broadcaster.onControlMessage = { [weak inputController] message in
+            inputController?.handle(message)
+        }
 
         let dimensions = Self.outputDimensions(
             width: display.width,
             height: display.height,
-            maximumLongEdge: 1_920
+            maximumLongEdge: 2_732
         )
         encoder = try H264Encoder(
             width: Int32(dimensions.width),
-            height: Int32(dimensions.height)
+            height: Int32(dimensions.height),
+            framesPerSecond: 60,
+            averageBitRate: 18_000_000
         ) { [broadcaster] packet in
             broadcaster.broadcast(packet)
         }
@@ -39,7 +49,7 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
         let configuration = SCStreamConfiguration()
         configuration.width = dimensions.width
         configuration.height = dimensions.height
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
+        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 60)
         configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         configuration.queueDepth = 3
         configuration.showsCursor = true
@@ -80,7 +90,7 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
         let presentationTime = sampleBuffer.presentationTimeStamp
         let duration = sampleBuffer.duration.isValid
             ? sampleBuffer.duration
-            : CMTime(value: 1, timescale: 30)
+            : CMTime(value: 1, timescale: 60)
         do {
             try encoder?.encode(
                 pixelBuffer: pixelBuffer,
@@ -111,3 +121,4 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
 enum HostError: Error {
     case noDisplays
 }
+#endif

@@ -86,6 +86,9 @@ The repository now contains the first capture and media slice:
 - A Network.framework TCP listener broadcasts configuration and frame packets.
 - `LANVideoReceiver` and `H264Decoder` provide the receiver path that the iPad
   app will use.
+- The stream targets a 2732-pixel long edge at 60 fps and 18 Mbps.
+- The same TCP session carries normalized pointer, click, scroll, and text
+  input back to the Mac.
 
 Build and run the host with:
 
@@ -111,6 +114,25 @@ or iPad simulator. The client:
 
 The first local-network scan prompts for permission on iPadOS. Start
 `swift run cast-host` on the Mac before opening the client.
+
+Remote control requires Accessibility permission on the Mac. Grant it to the
+Terminal or host application under System Settings > Privacy & Security >
+Accessibility, then restart the host.
+
+## Internet transport contract
+
+`InternetSessionProvider` defines the account-facing boundary for listing Macs
+and obtaining short-lived connection tickets. A production implementation
+requires:
+
+- Sign in with Apple token verification on a backend.
+- Mac presence registration tied to the verified account.
+- WebRTC offer/answer and ICE signaling.
+- A TURN service for networks where peer-to-peer connectivity fails.
+- Per-session authorization and device identity verification.
+
+The raw LAN TCP listener is deliberately not used over the public internet. It
+has no authentication or encryption and must not be port-forwarded.
 
 ## Next implementation slice
 
