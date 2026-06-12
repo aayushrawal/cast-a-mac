@@ -1,3 +1,4 @@
+import CastCore
 import CastMedia
 import CastTransport
 import CoreVideo
@@ -119,5 +120,21 @@ final class ClientSessionModel: ObservableObject {
 
     func sendKey(keyCode: UInt16, isPressed: Bool) {
         receiver?.sendKey(keyCode: keyCode, isPressed: isPressed)
+    }
+
+    func performThreeFingerSwipe(_ direction: ThreeFingerSwipeDirection) {
+        let keyCode: UInt16
+        switch direction {
+        case .left:
+            keyCode = 124
+        case .right:
+            keyCode = 123
+        case .down:
+            keyCode = 125
+        case .up:
+            keyCode = 126
+        }
+        receiver?.sendKey(keyCode: keyCode, isPressed: true, modifiers: .control)
+        receiver?.sendKey(keyCode: keyCode, isPressed: false, modifiers: .control)
     }
 }

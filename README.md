@@ -37,6 +37,8 @@ implementation.
 - Decodes the hardware video stream and renders it with Metal.
 - Maps Apple Pencil, touch, trackpad, and hardware keyboard input to the remote
   display coordinate space.
+- Uses two-finger pans for scrolling and three-finger swipes for Mission
+  Control, App Exposé, and switching Spaces.
 - Offers explicit controls for display selection, bitrate, frame rate, scaling,
   clipboard sync, and disconnect.
 

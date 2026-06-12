@@ -16,7 +16,8 @@ struct ContentView: View {
                     rightClick: session.rightClick,
                     scroll: session.scroll,
                     sendText: session.sendText,
-                    sendKey: session.sendKey
+                    sendKey: session.sendKey,
+                    performThreeFingerSwipe: session.performThreeFingerSwipe
                 )
             } else {
                 NavigationSplitView {

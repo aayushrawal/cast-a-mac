@@ -43,15 +43,15 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
         }
 
         let dimensions = Self.outputDimensions(
-            width: display.width,
-            height: display.height,
-            maximumLongEdge: 2_732
+            width: CGDisplayPixelsWide(display.displayID),
+            height: CGDisplayPixelsHigh(display.displayID),
+            maximumLongEdge: 4_096
         )
         encoder = try H264Encoder(
             width: Int32(dimensions.width),
             height: Int32(dimensions.height),
             framesPerSecond: 60,
-            averageBitRate: 18_000_000
+            averageBitRate: 32_000_000
         ) { [broadcaster] packet in
             broadcaster.broadcast(packet)
         }

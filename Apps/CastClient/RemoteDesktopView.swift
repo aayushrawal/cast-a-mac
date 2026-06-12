@@ -2,6 +2,13 @@ import CoreVideo
 import SwiftUI
 import UIKit
 
+enum ThreeFingerSwipeDirection {
+    case up
+    case down
+    case left
+    case right
+}
+
 struct RemoteDesktopView: View {
     let macName: String
     let frame: CVPixelBuffer?
@@ -13,6 +20,7 @@ struct RemoteDesktopView: View {
     let scroll: (Double, Double) -> Void
     let sendText: (String) -> Void
     let sendKey: (UInt16, Bool) -> Void
+    let performThreeFingerSwipe: (ThreeFingerSwipeDirection) -> Void
 
     @State private var keyboardIsActive = false
     @State private var controlsVisible = true
@@ -42,6 +50,7 @@ struct RemoteDesktopView: View {
                             scroll: scroll,
                             sendText: sendText,
                             sendKey: sendKey,
+                            performThreeFingerSwipe: performThreeFingerSwipe,
                             keyboardIsActive: keyboardIsActive,
                             controlsVisible: controlsVisible,
                             cornerActivity: revealControls
@@ -140,6 +149,7 @@ private struct RemoteInputOverlay: UIViewRepresentable {
     let scroll: (Double, Double) -> Void
     let sendText: (String) -> Void
     let sendKey: (UInt16, Bool) -> Void
+    let performThreeFingerSwipe: (ThreeFingerSwipeDirection) -> Void
     let keyboardIsActive: Bool
     let controlsVisible: Bool
     let cornerActivity: () -> Void
@@ -175,6 +185,12 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         )
         scrollGesture.minimumNumberOfTouches = 2
         scrollGesture.maximumNumberOfTouches = 2
+        let threeFingerSwipe = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.threeFingerSwipe(_:))
+        )
+        threeFingerSwipe.minimumNumberOfTouches = 3
+        threeFingerSwipe.maximumNumberOfTouches = 3
         let rightClick = UILongPressGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.rightClick(_:))
@@ -186,10 +202,16 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         )
 
         tap.require(toFail: drag)
+        tap.delegate = context.coordinator
+        drag.delegate = context.coordinator
+        scrollGesture.delegate = context.coordinator
+        threeFingerSwipe.delegate = context.coordinator
+        rightClick.delegate = context.coordinator
         context.coordinator.setGestureView(view)
         view.addGestureRecognizer(tap)
         view.addGestureRecognizer(drag)
         view.addGestureRecognizer(scrollGesture)
+        view.addGestureRecognizer(threeFingerSwipe)
         view.addGestureRecognizer(rightClick)
         view.addGestureRecognizer(hover)
         return view
@@ -206,8 +228,9 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var parent: RemoteInputOverlay
+        private var threeFingerSwipeTriggered = false
 
         init(parent: RemoteInputOverlay) {
             self.parent = parent
@@ -247,10 +270,42 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         }
 
         @objc func scroll(_ recognizer: UIPanGestureRecognizer) {
-            guard recognizer.state == .changed else { return }
+            guard recognizer.state == .changed else {
+                return
+            }
             let delta = recognizer.translation(in: recognizer.view)
             recognizer.setTranslation(.zero, in: recognizer.view)
-            parent.scroll(delta.x * 2, delta.y * 2)
+            parent.scroll(delta.x * 3, delta.y * 3)
+        }
+
+        @objc func threeFingerSwipe(_ recognizer: UIPanGestureRecognizer) {
+            switch recognizer.state {
+            case .began:
+                threeFingerSwipeTriggered = false
+            case .changed:
+                guard !threeFingerSwipeTriggered else { return }
+                let translation = recognizer.translation(in: recognizer.view)
+                let velocity = recognizer.velocity(in: recognizer.view)
+                let horizontal = abs(translation.x) > abs(translation.y)
+                let distance = horizontal ? abs(translation.x) : abs(translation.y)
+                let speed = horizontal ? abs(velocity.x) : abs(velocity.y)
+                guard distance >= 44 || speed >= 500 else { return }
+
+                threeFingerSwipeTriggered = true
+                if horizontal {
+                    parent.performThreeFingerSwipe(
+                        translation.x < 0 ? .left : .right
+                    )
+                } else {
+                    parent.performThreeFingerSwipe(
+                        translation.y < 0 ? .up : .down
+                    )
+                }
+            case .ended, .cancelled, .failed:
+                threeFingerSwipeTriggered = false
+            default:
+                break
+            }
         }
 
         @objc func rightClick(_ recognizer: UILongPressGestureRecognizer) {
@@ -309,6 +364,13 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         }
 
         private weak var gestureView: UIView?
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
 
         fileprivate func setGestureView(_ view: UIView) {
             gestureView = view
