@@ -1,4 +1,5 @@
 import CoreVideo
+import CastCore
 import SwiftUI
 import UIKit
 
@@ -19,7 +20,7 @@ struct RemoteDesktopView: View {
     let rightClick: (Double, Double) -> Void
     let scroll: (Double, Double) -> Void
     let sendText: (String) -> Void
-    let sendKey: (UInt16, Bool) -> Void
+    let sendKey: (UInt16, Bool, KeyModifiers) -> Void
     let performThreeFingerSwipe: (ThreeFingerSwipeDirection) -> Void
 
     @State private var keyboardIsActive = false
@@ -115,6 +116,10 @@ struct RemoteDesktopView: View {
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
+            .background {
+                SystemGestureDeferringView()
+                    .allowsHitTesting(false)
+            }
         }
         .ignoresSafeArea()
         .animation(.easeInOut(duration: 0.2), value: controlsVisible)
@@ -148,7 +153,7 @@ private struct RemoteInputOverlay: UIViewRepresentable {
     let rightClick: (Double, Double) -> Void
     let scroll: (Double, Double) -> Void
     let sendText: (String) -> Void
-    let sendKey: (UInt16, Bool) -> Void
+    let sendKey: (UInt16, Bool, KeyModifiers) -> Void
     let performThreeFingerSwipe: (ThreeFingerSwipeDirection) -> Void
     let keyboardIsActive: Bool
     let controlsVisible: Bool
@@ -168,6 +173,9 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         view.onDeleteBackward = { [weak coordinator = context.coordinator] in
             coordinator?.sendKeyPress(keyCode: 51)
         }
+        view.onSpecialKey = { [weak coordinator = context.coordinator] keyCode, isPressed, modifiers in
+            coordinator?.parent.sendKey(keyCode, isPressed, modifiers)
+        }
 
         let tap = UITapGestureRecognizer(
             target: context.coordinator,
@@ -185,12 +193,14 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         )
         scrollGesture.minimumNumberOfTouches = 2
         scrollGesture.maximumNumberOfTouches = 2
+        scrollGesture.requiresExclusiveTouchType = true
         let threeFingerSwipe = UIPanGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.threeFingerSwipe(_:))
         )
         threeFingerSwipe.minimumNumberOfTouches = 3
         threeFingerSwipe.maximumNumberOfTouches = 3
+        threeFingerSwipe.requiresExclusiveTouchType = true
         let rightClick = UILongPressGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.rightClick(_:))
@@ -219,12 +229,11 @@ private struct RemoteInputOverlay: UIViewRepresentable {
 
     func updateUIView(_ view: RemoteInputView, context: Context) {
         context.coordinator.parent = self
-        if keyboardIsActive, !view.isFirstResponder {
+        view.showsSoftwareKeyboard = keyboardIsActive
+        if !view.isFirstResponder {
             DispatchQueue.main.async {
                 view.becomeFirstResponder()
             }
-        } else if !keyboardIsActive, view.isFirstResponder {
-            view.resignFirstResponder()
         }
     }
 
@@ -237,8 +246,8 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         }
 
         func sendKeyPress(keyCode: UInt16) {
-            parent.sendKey(keyCode, true)
-            parent.sendKey(keyCode, false)
+            parent.sendKey(keyCode, true, [])
+            parent.sendKey(keyCode, false, [])
         }
 
         @objc func tap(_ recognizer: UITapGestureRecognizer) {
@@ -369,7 +378,7 @@ private struct RemoteInputOverlay: UIViewRepresentable {
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            true
+            false
         }
 
         fileprivate func setGestureView(_ view: UIView) {
@@ -378,9 +387,45 @@ private struct RemoteInputOverlay: UIViewRepresentable {
     }
 }
 
+private struct SystemGestureDeferringView: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> SystemGestureDeferringController {
+        SystemGestureDeferringController()
+    }
+
+    func updateUIViewController(
+        _ uiViewController: SystemGestureDeferringController,
+        context: Context
+    ) {}
+}
+
+private final class SystemGestureDeferringController: UIViewController {
+    override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge {
+        .all
+    }
+
+    override var prefersHomeIndicatorAutoHidden: Bool {
+        true
+    }
+
+    override func loadView() {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        self.view = view
+    }
+}
+
 private final class RemoteInputView: UIView, UIKeyInput {
     var onInsertText: ((String) -> Void)?
     var onDeleteBackward: (() -> Void)?
+    var onSpecialKey: ((UInt16, Bool, KeyModifiers) -> Void)?
+    var showsSoftwareKeyboard = false {
+        didSet {
+            guard oldValue != showsSoftwareKeyboard else { return }
+            reloadInputViews()
+        }
+    }
+    private let hiddenInputView = UIView(frame: .zero)
 
     override var canBecomeFirstResponder: Bool {
         true
@@ -390,12 +435,58 @@ private final class RemoteInputView: UIView, UIKeyInput {
         true
     }
 
+    override var inputView: UIView? {
+        showsSoftwareKeyboard ? nil : hiddenInputView
+    }
+
     func insertText(_ text: String) {
-        onInsertText?(text)
+        if text == "\n" || text == "\r" {
+            sendKeyPress(keyCode: 36)
+        } else if text == "\t" {
+            sendKeyPress(keyCode: 48)
+        } else {
+            onInsertText?(text)
+        }
     }
 
     func deleteBackward() {
         onDeleteBackward?()
+    }
+
+    override func pressesBegan(
+        _ presses: Set<UIPress>,
+        with event: UIPressesEvent?
+    ) {
+        var handled = false
+        for press in presses {
+            guard let key = press.key,
+                  let keyCode = key.macVirtualKeyCode else {
+                continue
+            }
+            handled = true
+            onSpecialKey?(keyCode, true, key.modifierFlags.castModifiers)
+        }
+        if !handled {
+            super.pressesBegan(presses, with: event)
+        }
+    }
+
+    override func pressesEnded(
+        _ presses: Set<UIPress>,
+        with event: UIPressesEvent?
+    ) {
+        var handled = false
+        for press in presses {
+            guard let key = press.key,
+                  let keyCode = key.macVirtualKeyCode else {
+                continue
+            }
+            handled = true
+            onSpecialKey?(keyCode, false, key.modifierFlags.castModifiers)
+        }
+        if !handled {
+            super.pressesEnded(presses, with: event)
+        }
     }
 
     var autocorrectionType: UITextAutocorrectionType {
@@ -421,5 +512,116 @@ private final class RemoteInputView: UIView, UIKeyInput {
     var smartInsertDeleteType: UITextSmartInsertDeleteType {
         get { .no }
         set {}
+    }
+
+    private func sendKeyPress(keyCode: UInt16) {
+        onSpecialKey?(keyCode, true, [])
+        onSpecialKey?(keyCode, false, [])
+    }
+}
+
+private extension UIKey {
+    var macVirtualKeyCode: UInt16? {
+        if let specialKeyCode = keyCode.macVirtualKeyCode {
+            return specialKeyCode
+        }
+        let shortcutModifiers: UIKeyModifierFlags = [
+            .command,
+            .control,
+            .alternate
+        ]
+        guard !modifierFlags.intersection(shortcutModifiers).isEmpty else {
+            return nil
+        }
+        return charactersIgnoringModifiers.lowercased().first?.macVirtualKeyCode
+    }
+}
+
+private extension Character {
+    var macVirtualKeyCode: UInt16? {
+        switch self {
+        case "a": 0
+        case "s": 1
+        case "d": 2
+        case "f": 3
+        case "h": 4
+        case "g": 5
+        case "z": 6
+        case "x": 7
+        case "c": 8
+        case "v": 9
+        case "b": 11
+        case "q": 12
+        case "w": 13
+        case "e": 14
+        case "r": 15
+        case "y": 16
+        case "t": 17
+        case "1": 18
+        case "2": 19
+        case "3": 20
+        case "4": 21
+        case "6": 22
+        case "5": 23
+        case "=": 24
+        case "9": 25
+        case "7": 26
+        case "-": 27
+        case "8": 28
+        case "0": 29
+        case "]": 30
+        case "o": 31
+        case "u": 32
+        case "[": 33
+        case "i": 34
+        case "p": 35
+        case "l": 37
+        case "j": 38
+        case "'": 39
+        case "k": 40
+        case ";": 41
+        case "\\": 42
+        case ",": 43
+        case "/": 44
+        case "n": 45
+        case "m": 46
+        case ".": 47
+        case "`": 50
+        default: nil
+        }
+    }
+}
+
+private extension UIKeyboardHIDUsage {
+    var macVirtualKeyCode: UInt16? {
+        switch self {
+        case .keyboardReturnOrEnter: 36
+        case .keyboardEscape: 53
+        case .keyboardDeleteOrBackspace: 51
+        case .keyboardDeleteForward: 117
+        case .keyboardTab: 48
+        case .keyboardSpacebar: 49
+        case .keyboardLeftArrow: 123
+        case .keyboardRightArrow: 124
+        case .keyboardDownArrow: 125
+        case .keyboardUpArrow: 126
+        case .keyboardHome: 115
+        case .keyboardEnd: 119
+        case .keyboardPageUp: 116
+        case .keyboardPageDown: 121
+        default: nil
+        }
+    }
+}
+
+private extension UIKeyModifierFlags {
+    var castModifiers: KeyModifiers {
+        var modifiers: KeyModifiers = []
+        if contains(.shift) { modifiers.insert(.shift) }
+        if contains(.control) { modifiers.insert(.control) }
+        if contains(.alternate) { modifiers.insert(.option) }
+        if contains(.command) { modifiers.insert(.command) }
+        if contains(.alphaShift) { modifiers.insert(.capsLock) }
+        return modifiers
     }
 }

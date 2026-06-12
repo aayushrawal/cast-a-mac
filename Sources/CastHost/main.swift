@@ -1,4 +1,5 @@
 import Foundation
+import CastHostKit
 
 #if os(macOS)
 let port: UInt16 = {

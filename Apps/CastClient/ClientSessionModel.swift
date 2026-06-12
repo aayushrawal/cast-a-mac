@@ -118,8 +118,16 @@ final class ClientSessionModel: ObservableObject {
         receiver?.sendText(text)
     }
 
-    func sendKey(keyCode: UInt16, isPressed: Bool) {
-        receiver?.sendKey(keyCode: keyCode, isPressed: isPressed)
+    func sendKey(
+        keyCode: UInt16,
+        isPressed: Bool,
+        modifiers: KeyModifiers = []
+    ) {
+        receiver?.sendKey(
+            keyCode: keyCode,
+            isPressed: isPressed,
+            modifiers: modifiers
+        )
     }
 
     func performThreeFingerSwipe(_ direction: ThreeFingerSwipeDirection) {

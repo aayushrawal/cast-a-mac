@@ -31,16 +31,40 @@ off. A closed-lid MacBook, a headless Mac, or a Mac whose panel must remain dark
 requires an attached display-emulator adapter or a future virtual-display
 implementation.
 
+### Mac menu-bar host
+
+Build a standalone menu-bar app with:
+
+```sh
+Scripts/build-host-app.sh
+```
+
+Open `dist/Cast-a-mac Host.app`. Its display icon provides start, restart, stop,
+Screen Recording settings, and Accessibility settings. The terminal
+`swift run cast-host` command remains available for diagnostics.
+
+The menu-bar app has its own macOS security identity. The first time it runs,
+enable it in **Privacy & Security > Screen & System Audio Recording** and
+**Privacy & Security > Accessibility**, then choose **Restart Streaming**.
+
 ### iPad client
 
 - Discovers previously paired Macs through the coordination service.
 - Decodes the hardware video stream and renders it with Metal.
 - Maps Apple Pencil, touch, trackpad, and hardware keyboard input to the remote
   display coordinate space.
+- Keeps a connected physical keyboard active while the software keyboard is
+  hidden, including Enter, Tab, Escape, arrows, navigation keys, and common
+  Command/Control/Option shortcuts.
 - Uses two-finger pans for scrolling and three-finger swipes for Mission
   Control, App Exposé, and switching Spaces.
 - Offers explicit controls for display selection, bitrate, frame rate, scaling,
   clipboard sync, and disconnect.
+
+iPadOS edge gestures are deferred while the remote desktop is open, but Apple
+does not let third-party apps suppress every system multitasking gesture. For a
+session where all multi-finger gestures must reach the Mac, turn off the
+relevant multitasking gestures in the iPad Settings app.
 
 ### Coordination service
 

@@ -12,7 +12,9 @@ let package = Package(
         .library(name: "CastCore", targets: ["CastCore"]),
         .library(name: "CastMedia", targets: ["CastMedia"]),
         .library(name: "CastTransport", targets: ["CastTransport"]),
-        .executable(name: "cast-host", targets: ["CastHost"])
+        .library(name: "CastHostKit", targets: ["CastHostKit"]),
+        .executable(name: "cast-host", targets: ["CastHost"]),
+        .executable(name: "cast-host-app", targets: ["CastHostApp"])
     ],
     targets: [
         .target(name: "CastCore"),
@@ -30,8 +32,8 @@ let package = Package(
                 .linkedFramework("Network")
             ]
         ),
-        .executableTarget(
-            name: "CastHost",
+        .target(
+            name: "CastHostKit",
             dependencies: ["CastCore", "CastMedia", "CastTransport"],
             linkerSettings: [
                 .linkedFramework("CoreMedia"),
@@ -39,6 +41,18 @@ let package = Package(
                 .linkedFramework("IOKit"),
                 .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("VideoToolbox")
+            ]
+        ),
+        .executableTarget(
+            name: "CastHost",
+            dependencies: ["CastHostKit"]
+        ),
+        .executableTarget(
+            name: "CastHostApp",
+            dependencies: ["CastHostKit"],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("SwiftUI")
             ]
         ),
         .testTarget(

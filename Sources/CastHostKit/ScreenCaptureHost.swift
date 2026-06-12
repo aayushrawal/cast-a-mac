@@ -7,7 +7,7 @@ import Foundation
 import CoreGraphics
 import ScreenCaptureKit
 
-final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
+public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
     @unchecked Sendable {
     private let captureQueue = DispatchQueue(label: "com.castamac.capture")
     private let broadcaster: LANVideoBroadcaster
@@ -16,13 +16,13 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
     private var inputController: RemoteInputController?
     private var powerAssertion: HostPowerAssertion?
 
-    init(port: UInt16) throws {
+    public init(port: UInt16) throws {
         broadcaster = try LANVideoBroadcaster(port: port)
         super.init()
         broadcaster.onStateChange = { print($0) }
     }
 
-    func start() async throws {
+    public func start() async throws {
         guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
             throw HostError.screenRecordingPermissionDenied
         }
@@ -92,7 +92,7 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
         )
     }
 
-    func stop() async throws {
+    public func stop() async throws {
         try await stream?.stopCapture()
         broadcaster.stop()
         stream = nil
@@ -100,7 +100,7 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
         powerAssertion = nil
     }
 
-    func stream(
+    public func stream(
         _ stream: SCStream,
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of outputType: SCStreamOutputType
@@ -127,7 +127,7 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
         }
     }
 
-    func stream(_ stream: SCStream, didStopWithError error: any Error) {
+    public func stream(_ stream: SCStream, didStopWithError error: any Error) {
         fputs("Capture stopped: \(error)\n", stderr)
     }
 
@@ -143,11 +143,11 @@ final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate,
     }
 }
 
-enum HostError: LocalizedError {
+public enum HostError: LocalizedError {
     case noDisplays
     case screenRecordingPermissionDenied
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .noDisplays:
             "No active Mac display is available to capture."
