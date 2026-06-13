@@ -49,7 +49,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "CastHostApp",
-            dependencies: ["CastHostKit"],
+            dependencies: ["CastCore", "CastHostKit"],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI")

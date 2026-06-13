@@ -1,4 +1,5 @@
 #if os(macOS)
+import CastCore
 import CastMedia
 import CastTransport
 import CoreMedia
@@ -11,15 +12,28 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
     @unchecked Sendable {
     private let captureQueue = DispatchQueue(label: "com.castamac.capture")
     private let broadcaster: LANVideoBroadcaster
+    private let relay: RelayHostConnection?
     private var stream: SCStream?
     private var encoder: H264Encoder?
     private var inputController: RemoteInputController?
     private var powerAssertion: HostPowerAssertion?
 
-    public init(port: UInt16) throws {
-        broadcaster = try LANVideoBroadcaster(port: port)
+    public init(
+        port: UInt16,
+        relayConfiguration: RelayHostConfiguration? = nil
+    ) throws {
+        let identity = HostIdentityStore.loadOrCreate()
+        broadcaster = try LANVideoBroadcaster(
+            port: port,
+            hostID: identity.id,
+            hostName: identity.name
+        )
+        relay = try relayConfiguration.map {
+            try RelayHostConnection(configuration: $0)
+        }
         super.init()
         broadcaster.onStateChange = { print($0) }
+        relay?.onStateChange = { print($0) }
     }
 
     public func start() async throws {
@@ -41,6 +55,9 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
         broadcaster.onControlMessage = { [weak inputController] message in
             inputController?.handle(message)
         }
+        relay?.onControlMessage = { [weak inputController] message in
+            inputController?.handle(message)
+        }
 
         let dimensions = Self.outputDimensions(
             width: CGDisplayPixelsWide(display.displayID),
@@ -52,8 +69,9 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
             height: Int32(dimensions.height),
             framesPerSecond: 60,
             averageBitRate: 32_000_000
-        ) { [broadcaster] packet in
+        ) { [broadcaster, relay] packet in
             broadcaster.broadcast(packet)
+            relay?.broadcast(packet)
         }
 
         let configuration = SCStreamConfiguration()
@@ -85,6 +103,7 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
         self.stream = stream
 
         broadcaster.start()
+        relay?.start()
         try await stream.startCapture()
         print(
             "Capturing display \(display.displayID) at "
@@ -95,6 +114,7 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
     public func stop() async throws {
         try await stream?.stopCapture()
         broadcaster.stop()
+        relay?.stop()
         stream = nil
         encoder = nil
         powerAssertion = nil

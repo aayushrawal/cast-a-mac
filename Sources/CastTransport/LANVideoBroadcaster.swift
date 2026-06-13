@@ -13,14 +13,23 @@ public final class LANVideoBroadcaster: @unchecked Sendable {
     public var onStateChange: (@Sendable (String) -> Void)?
     public var onControlMessage: (@Sendable (ControlMessage) -> Void)?
 
-    public init(port: UInt16) throws {
+    public init(
+        port: UInt16,
+        hostID: UUID,
+        hostName: String
+    ) throws {
         guard let networkPort = NWEndpoint.Port(rawValue: port) else {
             throw NWError.posix(.EINVAL)
         }
         listener = try NWListener(using: .tcp, on: networkPort)
+        let txtRecord = NWTXTRecord([
+            "hostID": hostID.uuidString,
+            "version": String(CastProtocol.currentVersion)
+        ])
         listener.service = NWListener.Service(
-            name: ProcessInfo.processInfo.hostName,
-            type: "_castamac._tcp"
+            name: hostName,
+            type: "_castamac._tcp",
+            txtRecord: txtRecord
         )
     }
 

@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import CastCore
 import CastHostKit
 import SwiftUI
 
@@ -14,6 +15,25 @@ struct CastHostMenuApp: App {
             VStack(alignment: .leading, spacing: 8) {
                 Label(controller.status, systemImage: controller.statusIcon)
                     .font(.headline)
+
+                Divider()
+
+                TextField("Relay URL", text: $controller.relayURLText)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Text("Link code: \(controller.linkCode)")
+                        .font(.system(.body, design: .monospaced))
+                    Spacer()
+                    Button("Copy") {
+                        controller.copyLinkCode()
+                    }
+                }
+
+                Button("Save Internet Settings & Restart") {
+                    controller.saveRelaySettingsAndRestart()
+                }
+                .disabled(controller.isBusy)
 
                 Divider()
 
@@ -76,9 +96,21 @@ private final class HostMenuController: ObservableObject {
     @Published private(set) var status = "Stopped"
     @Published private(set) var isRunning = false
     @Published private(set) var isBusy = false
+    @Published var relayURLText: String
 
     private var host: ScreenCaptureHost?
     private var operation: Task<Void, Never>?
+    private let relayURLKey = "relayBaseURL"
+
+    private init() {
+        relayURLText = UserDefaults.standard.string(
+            forKey: relayURLKey
+        ) ?? ""
+    }
+
+    var linkCode: String {
+        HostRelayCredentialStore.loadOrCreate().linkCode
+    }
 
     var statusIcon: String {
         if isBusy { return "arrow.triangle.2.circlepath" }
@@ -94,11 +126,13 @@ private final class HostMenuController: ObservableObject {
             defer { isBusy = false }
 
             do {
-                let host = try ScreenCaptureHost(port: 4_982)
+                let host = try makeHost()
                 try await host.start()
                 self.host = host
                 isRunning = true
-                status = "Streaming on port 4982"
+                status = relayConfiguration == nil
+                    ? "Available on local network"
+                    : "Available locally and over internet"
             } catch {
                 host = nil
                 isRunning = false
@@ -131,11 +165,13 @@ private final class HostMenuController: ObservableObject {
             do {
                 try await host?.stop()
                 host = nil
-                let replacement = try ScreenCaptureHost(port: 4_982)
+                let replacement = try makeHost()
                 try await replacement.start()
                 host = replacement
                 isRunning = true
-                status = "Streaming on port 4982"
+                status = relayConfiguration == nil
+                    ? "Available on local network"
+                    : "Available locally and over internet"
             } catch {
                 host = nil
                 isRunning = false
@@ -152,6 +188,40 @@ private final class HostMenuController: ObservableObject {
             return
         }
         NSWorkspace.shared.open(url)
+    }
+
+    func saveRelaySettingsAndRestart() {
+        let trimmed = relayURLText.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        relayURLText = trimmed
+        UserDefaults.standard.set(trimmed, forKey: relayURLKey)
+        restart()
+    }
+
+    func copyLinkCode() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(
+            linkCode,
+            forType: .string
+        )
+    }
+
+    private var relayConfiguration: RelayHostConfiguration? {
+        let trimmed = relayURLText.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else {
+            return nil
+        }
+        return HostRelayCredentialStore.configuration(baseURL: url)
+    }
+
+    private func makeHost() throws -> ScreenCaptureHost {
+        try ScreenCaptureHost(
+            port: 4_982,
+            relayConfiguration: relayConfiguration
+        )
     }
 }
 #endif

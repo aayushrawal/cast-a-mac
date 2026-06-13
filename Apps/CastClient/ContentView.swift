@@ -91,20 +91,116 @@ private struct MacListView: View {
             }
 
             Section("Your Macs") {
-                Button {
-                    session.showsInternetPreview.toggle()
-                } label: {
-                    Label("Sign in with Apple", systemImage: "person.crop.circle.badge.plus")
+                ForEach(session.rememberedMacs) { mac in
+                    Button {
+                        session.connect(to: mac)
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(mac.name)
+                                    .foregroundStyle(.primary)
+                                Text(
+                                    session.isNearby(mac)
+                                        ? "Nearby · Local connection"
+                                        : session.hasInternetAccess(mac)
+                                            ? "Internet connection"
+                                            : "Remembered · Link internet access"
+                                )
+                                .font(.caption)
+                                .foregroundStyle(
+                                    session.isNearby(mac)
+                                        || session.hasInternetAccess(mac)
+                                        ? .green
+                                        : .secondary
+                                )
+                            }
+                        } icon: {
+                            Image(systemName: "desktopcomputer")
+                                .foregroundStyle(.blue)
+                        }
+                    }
                 }
 
-                if session.showsInternetPreview {
-                    Text(session.internetStatus)
+                Button {
+                    session.showsLinkMac = true
+                } label: {
+                    Label("Link a Mac", systemImage: "link.badge.plus")
+                }
+
+                Text(session.internetStatus)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                }
             }
         }
         .listStyle(.sidebar)
+        .sheet(isPresented: $session.showsLinkMac) {
+            LinkMacView(session: session)
+        }
+    }
+}
+
+private struct LinkMacView: View {
+    @ObservedObject var session: ClientSessionModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var relayURL = ""
+    @State private var linkCode = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(
+                        "https://relay.example.com",
+                        text: $relayURL
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+
+                    TextField("8-character code", text: $linkCode)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Internet Relay")
+                } footer: {
+                    Text(
+                        "Use the relay URL and link code shown in the "
+                            + "Cast-a-mac menu on your Mac."
+                    )
+                }
+
+                if session.isLinkingMac {
+                    ProgressView("Linking Mac...")
+                }
+
+                Text(session.internetStatus)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .navigationTitle("Link a Mac")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Link") {
+                        Task {
+                            await session.linkMac(
+                                relayURLText: relayURL,
+                                code: linkCode
+                            )
+                        }
+                    }
+                    .disabled(
+                        relayURL.isEmpty
+                            || linkCode.isEmpty
+                            || session.isLinkingMac
+                    )
+                }
+            }
+        }
+        .frame(minWidth: 480, minHeight: 360)
     }
 }
 

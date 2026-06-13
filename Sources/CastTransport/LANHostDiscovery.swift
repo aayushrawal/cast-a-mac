@@ -3,11 +3,13 @@ import Network
 
 public struct LANDiscoveredHost: Identifiable, Hashable, @unchecked Sendable {
     public let id: String
+    public let hostID: UUID?
     public let name: String
     public let endpoint: NWEndpoint
 
-    public init(name: String, endpoint: NWEndpoint) {
-        self.id = String(describing: endpoint)
+    public init(hostID: UUID?, name: String, endpoint: NWEndpoint) {
+        self.id = hostID?.uuidString ?? String(describing: endpoint)
+        self.hostID = hostID
         self.name = name
         self.endpoint = endpoint
     }
@@ -30,7 +32,7 @@ public final class LANHostDiscovery: @unchecked Sendable {
 
     public init() {
         browser = NWBrowser(
-            for: .bonjour(type: "_castamac._tcp", domain: nil),
+            for: .bonjourWithTXTRecord(type: "_castamac._tcp", domain: nil),
             using: .tcp
         )
     }
@@ -56,6 +58,17 @@ public final class LANHostDiscovery: @unchecked Sendable {
         guard case let .service(name, _, _, _) = result.endpoint else {
             return nil
         }
-        return LANDiscoveredHost(name: name, endpoint: result.endpoint)
+        let hostID: UUID?
+        if case let .bonjour(txtRecord) = result.metadata,
+           let value = txtRecord["hostID"] {
+            hostID = UUID(uuidString: value)
+        } else {
+            hostID = nil
+        }
+        return LANDiscoveredHost(
+            hostID: hostID,
+            name: name,
+            endpoint: result.endpoint
+        )
     }
 }

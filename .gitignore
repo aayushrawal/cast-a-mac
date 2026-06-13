@@ -5,5 +5,7 @@ DerivedData/
 dist/
 Assets/CastAMac.icns
 Assets/CastAMac.iconset/
+RelayServer/node_modules/
+RelayServer/relay-data.json
 *.xcuserstate
 xcuserdata/

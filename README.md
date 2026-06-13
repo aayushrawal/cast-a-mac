@@ -140,9 +140,12 @@ or iPad simulator. The client:
 
 - Discovers running Mac hosts automatically with Bonjour.
 - Lists nearby Macs without requiring an IP address.
+- Gives each Mac a stable identity and remembers it after the first connection.
+- Prefers the direct local connection whenever that Mac is on the same network.
+- Falls back to its linked TLS WebSocket relay when the Mac is remote.
 - Connects to the selected Mac and decodes its H.264 stream.
 - Renders the desktop with Metal.
-- Reserves a separate "Your Macs" section for account-linked internet hosts.
+- Stores relay access tokens in the iPad Keychain.
 
 The first local-network scan prompts for permission on iPadOS. Start
 `swift run cast-host` on the Mac before opening the client.
@@ -151,20 +154,47 @@ Remote control requires Accessibility permission on the Mac. Grant it to the
 Terminal or host application under System Settings > Privacy & Security >
 Accessibility, then restart the host.
 
-## Internet transport contract
+## Internet relay
 
-`InternetSessionProvider` defines the account-facing boundary for listing Macs
-and obtaining short-lived connection tickets. A production implementation
-requires:
+`RelayServer` is a deployable Node.js WebSocket relay. Both the Mac and iPad
+make outbound connections, so neither device needs a public IP address, router
+configuration, or port forwarding.
 
-- Sign in with Apple token verification on a backend.
-- Mac presence registration tied to the verified account.
-- WebRTC offer/answer and ICE signaling.
-- A TURN service for networks where peer-to-peer connectivity fails.
-- Per-session authorization and device identity verification.
+Run it locally for development:
 
-The raw LAN TCP listener is deliberately not used over the public internet. It
-has no authentication or encryption and must not be port-forwarded.
+```sh
+cd RelayServer
+npm install
+RELAY_TOKEN_SECRET="$(openssl rand -hex 32)" npm start
+```
+
+For internet use, deploy `RelayServer` behind a stable HTTPS URL. WebSocket
+support must be enabled, `RELAY_TOKEN_SECRET` must remain stable across
+deployments, and the service must use one instance unless the in-memory
+presence maps are replaced with shared storage.
+
+Then:
+
+1. Enter the HTTPS relay URL in the Mac menu-bar app.
+2. Choose **Save Internet Settings & Restart**.
+3. Copy the Mac's eight-character link code.
+4. On iPad, choose **Link a Mac** and enter the same relay URL and code.
+5. Select the Mac from **Your Macs**. Local Bonjour is preferred automatically;
+   the relay is used only when the local Mac ID is unavailable.
+
+The raw LAN TCP listener remains local-only and must not be port-forwarded.
+The relay uses TLS, a persistent random Mac secret, link-code pairing, and
+expiring client access tokens.
+
+### Sign in with Apple
+
+Apple does not provide an API for reading the Apple ID currently signed into a
+device. Account linking must use an explicit Sign in with Apple authorization
+on both apps and backend verification of Apple's identity token. That requires
+an Apple Developer App ID, Sign in with Apple entitlement, service
+configuration, and production callback domain. The relay authentication
+boundary is intentionally separate so Sign in with Apple can replace link
+codes once those identifiers are configured.
 
 ## Next implementation slice
 
