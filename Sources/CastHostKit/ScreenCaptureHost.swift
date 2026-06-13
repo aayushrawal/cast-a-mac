@@ -17,6 +17,10 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
     private var encoder: H264Encoder?
     private var inputController: RemoteInputController?
     private var powerAssertion: HostPowerAssertion?
+    private let stateLock = NSLock()
+    private var isStopping = false
+
+    public var onCaptureStopped: (@Sendable (String) -> Void)?
 
     public init(
         port: UInt16,
@@ -37,6 +41,9 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
     }
 
     public func start() async throws {
+        stateLock.withLock {
+            isStopping = false
+        }
         guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
             throw HostError.screenRecordingPermissionDenied
         }
@@ -112,12 +119,24 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
     }
 
     public func stop() async throws {
-        try await stream?.stopCapture()
+        stateLock.withLock {
+            isStopping = true
+        }
+        var stopError: (any Error)?
+        do {
+            try await stream?.stopCapture()
+        } catch {
+            stopError = error
+        }
         broadcaster.stop()
         relay?.stop()
         stream = nil
         encoder = nil
+        inputController = nil
         powerAssertion = nil
+        if let stopError {
+            throw stopError
+        }
     }
 
     public func stream(
@@ -149,6 +168,12 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
 
     public func stream(_ stream: SCStream, didStopWithError error: any Error) {
         fputs("Capture stopped: \(error)\n", stderr)
+        let shouldRecover = stateLock.withLock {
+            !isStopping
+        }
+        if shouldRecover {
+            onCaptureStopped?(error.localizedDescription)
+        }
     }
 
     private static func outputDimensions(

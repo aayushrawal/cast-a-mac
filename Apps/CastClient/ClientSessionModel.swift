@@ -28,6 +28,12 @@ final class ClientSessionModel: ObservableObject {
     private let coordinationClient = RelayCoordinationClient()
     private var receiver: (any ClientVideoReceiver)?
     private var decoder: H264Decoder?
+    private var activeMacID: UUID?
+    private var activeMacName: String?
+    private var connectionGeneration = UUID()
+    private var lastFrameReceivedAt: Date?
+    private var frameWatchdogTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
 
     init() {
         rememberedMacs = rememberedStore.load()
@@ -53,58 +59,16 @@ final class ClientSessionModel: ObservableObject {
     }
 
     func connect(to host: LANDiscoveredHost) {
-        disconnect()
         remember(host)
-        connectionState = .connecting(host.name)
-
-        let decoder = H264Decoder { [weak self] pixelBuffer, _ in
-            Task { @MainActor in
-                self?.latestFrame = pixelBuffer
-            }
-        }
-        let receiver = LANVideoReceiver(endpoint: host.endpoint) { [weak decoder] packet in
-            do {
-                try decoder?.consume(packet)
-            } catch {
-                print("Decode failed: \(error)")
-            }
-        }
-        receiver.onStateChange = { [weak self] state in
-            Task { @MainActor in
-                guard let self else { return }
-                if state.contains("ready") {
-                    self.connectionState = .connected(host.name)
-                } else if state.contains("failed") {
-                    self.connectionState = .failed("Could not connect to \(host.name).")
-                }
-            }
-        }
-
-        self.decoder = decoder
-        self.receiver = receiver
-        receiver.start()
+        activeMacID = host.hostID
+        activeMacName = host.name
+        connectLocally(to: host)
     }
 
     func connect(to rememberedMac: RememberedMac) {
-        if let localHost = hosts.first(where: {
-            $0.hostID == rememberedMac.id
-        }) {
-            connect(to: localHost)
-            return
-        }
-        guard let baseURL = rememberedMac.relayBaseURL,
-              let accessToken = rememberedMac.relayAccessToken else {
-            connectionState = .failed(
-                "\(rememberedMac.name) is not on this network. "
-                    + "Link it to an internet relay first."
-            )
-            return
-        }
-        connectOverRelay(
-            to: rememberedMac,
-            baseURL: baseURL,
-            accessToken: accessToken
-        )
+        activeMacID = rememberedMac.id
+        activeMacName = rememberedMac.name
+        connectToActiveMac()
     }
 
     func linkMac(relayURLText: String, code: String) async {
@@ -142,11 +106,23 @@ final class ClientSessionModel: ObservableObject {
     }
 
     func disconnect() {
+        activeMacID = nil
+        activeMacName = nil
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        tearDownConnection()
+        connectionState = .browsing
+    }
+
+    private func tearDownConnection() {
+        connectionGeneration = UUID()
+        frameWatchdogTask?.cancel()
+        frameWatchdogTask = nil
         receiver?.stop()
         receiver = nil
         decoder = nil
+        lastFrameReceivedAt = nil
         latestFrame = nil
-        connectionState = .browsing
     }
 
     func movePointer(x: Double, y: Double) {
@@ -234,6 +210,12 @@ final class ClientSessionModel: ObservableObject {
         if changed {
             rememberedStore.save(rememberedMacs)
         }
+        if receiver == nil,
+           reconnectTask == nil,
+           let activeMacID,
+           hosts.contains(where: { $0.hostID == activeMacID }) {
+            connectToActiveMac()
+        }
     }
 
     private func remember(_ host: LANDiscoveredHost) {
@@ -273,12 +255,14 @@ final class ClientSessionModel: ObservableObject {
         baseURL: URL,
         accessToken: String
     ) {
-        disconnect()
+        tearDownConnection()
         connectionState = .connecting(mac.name)
+        let generation = connectionGeneration
+        lastFrameReceivedAt = Date()
 
         let decoder = H264Decoder { [weak self] pixelBuffer, _ in
             Task { @MainActor in
-                self?.latestFrame = pixelBuffer
+                self?.receivedFrame(pixelBuffer, generation: generation)
             }
         }
         do {
@@ -295,13 +279,16 @@ final class ClientSessionModel: ObservableObject {
             }
             receiver.onStateChange = { [weak self] state in
                 Task { @MainActor in
-                    guard let self else { return }
+                    guard let self,
+                          self.connectionGeneration == generation else {
+                        return
+                    }
                     if state.contains("ready") {
                         self.connectionState = .connected(mac.name)
-                    } else if state.contains("failed") {
-                        self.connectionState = .failed(
-                            "Could not reach \(mac.name) over the internet."
-                        )
+                        self.startFrameWatchdog(generation: generation)
+                    } else if state.contains("failed")
+                                || state.contains("cancelled") {
+                        self.scheduleReconnect(generation: generation)
                     }
                 }
             }
@@ -309,7 +296,129 @@ final class ClientSessionModel: ObservableObject {
             self.receiver = receiver
             receiver.start()
         } catch {
-            connectionState = .failed(error.localizedDescription)
+            scheduleReconnect(generation: generation)
+        }
+    }
+
+    private func connectLocally(to host: LANDiscoveredHost) {
+        tearDownConnection()
+        connectionState = .connecting(host.name)
+        let generation = connectionGeneration
+        lastFrameReceivedAt = Date()
+
+        let decoder = H264Decoder { [weak self] pixelBuffer, _ in
+            Task { @MainActor in
+                self?.receivedFrame(pixelBuffer, generation: generation)
+            }
+        }
+        let receiver = LANVideoReceiver(
+            endpoint: host.endpoint
+        ) { [weak decoder] packet in
+            do {
+                try decoder?.consume(packet)
+            } catch {
+                print("Decode failed: \(error)")
+            }
+        }
+        receiver.onStateChange = { [weak self] state in
+            Task { @MainActor in
+                guard let self,
+                      self.connectionGeneration == generation else {
+                    return
+                }
+                if state.contains("ready") {
+                    self.connectionState = .connected(host.name)
+                    self.startFrameWatchdog(generation: generation)
+                } else if state.contains("failed")
+                            || state.contains("cancelled") {
+                    self.scheduleReconnect(generation: generation)
+                }
+            }
+        }
+
+        self.decoder = decoder
+        self.receiver = receiver
+        receiver.start()
+    }
+
+    private func connectToActiveMac() {
+        guard let activeMacID, let activeMacName else {
+            return
+        }
+        if let localHost = hosts.first(where: {
+            $0.hostID == activeMacID
+        }) {
+            connectLocally(to: localHost)
+            return
+        }
+        if let mac = rememberedMacs.first(where: { $0.id == activeMacID }),
+           let baseURL = mac.relayBaseURL,
+           let accessToken = mac.relayAccessToken {
+            connectOverRelay(
+                to: mac,
+                baseURL: baseURL,
+                accessToken: accessToken
+            )
+            return
+        }
+        tearDownConnection()
+        connectionState = .connecting(activeMacName)
+        scheduleReconnect(generation: connectionGeneration)
+    }
+
+    private func receivedFrame(
+        _ pixelBuffer: CVPixelBuffer,
+        generation: UUID
+    ) {
+        guard connectionGeneration == generation else {
+            return
+        }
+        latestFrame = pixelBuffer
+        lastFrameReceivedAt = Date()
+    }
+
+    private func startFrameWatchdog(generation: UUID) {
+        frameWatchdogTask?.cancel()
+        frameWatchdogTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled, let self,
+                      self.connectionGeneration == generation else {
+                    return
+                }
+                guard let lastFrameReceivedAt = self.lastFrameReceivedAt,
+                      Date().timeIntervalSince(lastFrameReceivedAt) > 8 else {
+                    continue
+                }
+                self.scheduleReconnect(generation: generation)
+                return
+            }
+        }
+    }
+
+    private func scheduleReconnect(generation: UUID) {
+        guard connectionGeneration == generation,
+              activeMacID != nil,
+              reconnectTask == nil else {
+            return
+        }
+        frameWatchdogTask?.cancel()
+        frameWatchdogTask = nil
+        receiver?.stop()
+        receiver = nil
+        decoder = nil
+        latestFrame = nil
+        lastFrameReceivedAt = nil
+        connectionState = .connecting(activeMacName ?? "Mac")
+
+        reconnectTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self,
+                  self.connectionGeneration == generation else {
+                return
+            }
+            self.reconnectTask = nil
+            self.connectToActiveMac()
         }
     }
 }

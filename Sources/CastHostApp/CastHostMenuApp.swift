@@ -85,7 +85,40 @@ struct CastHostMenuApp: App {
 @MainActor
 private final class HostApplicationDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        workspaceCenter.addObserver(
+            self,
+            selector: #selector(systemDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+        workspaceCenter.addObserver(
+            self,
+            selector: #selector(screensDidWake),
+            name: NSWorkspace.screensDidWakeNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screenConfigurationChanged),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
         HostMenuController.shared.start()
+    }
+
+    @objc private func systemDidWake() {
+        HostMenuController.shared.scheduleRecovery(reason: "Mac woke from sleep")
+    }
+
+    @objc private func screensDidWake() {
+        HostMenuController.shared.scheduleRecovery(reason: "Display woke")
+    }
+
+    @objc private func screenConfigurationChanged() {
+        HostMenuController.shared.scheduleRecovery(
+            reason: "Display configuration changed"
+        )
     }
 }
 
@@ -100,6 +133,7 @@ private final class HostMenuController: ObservableObject {
 
     private var host: ScreenCaptureHost?
     private var operation: Task<Void, Never>?
+    private var recoveryTask: Task<Void, Never>?
     private let relayURLKey = "relayBaseURL"
 
     private init() {
@@ -142,6 +176,7 @@ private final class HostMenuController: ObservableObject {
     }
 
     func stop() {
+        recoveryTask?.cancel()
         operation?.cancel()
         operation = Task {
             isBusy = true
@@ -158,12 +193,28 @@ private final class HostMenuController: ObservableObject {
     }
 
     func restart() {
+        recoveryTask?.cancel()
+        performRestart()
+    }
+
+    func scheduleRecovery(reason: String) {
+        guard isRunning || isBusy else { return }
+        recoveryTask?.cancel()
+        status = "\(reason). Recovering stream..."
+        recoveryTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            performRestart()
+        }
+    }
+
+    private func performRestart() {
         operation?.cancel()
         operation = Task {
             isBusy = true
             status = "Restarting..."
             do {
-                try await host?.stop()
+                try? await host?.stop()
                 host = nil
                 let replacement = try makeHost()
                 try await replacement.start()
@@ -218,10 +269,16 @@ private final class HostMenuController: ObservableObject {
     }
 
     private func makeHost() throws -> ScreenCaptureHost {
-        try ScreenCaptureHost(
+        let host = try ScreenCaptureHost(
             port: 4_982,
             relayConfiguration: relayConfiguration
         )
+        host.onCaptureStopped = { [weak self] reason in
+            Task { @MainActor in
+                self?.scheduleRecovery(reason: "Capture stopped: \(reason)")
+            }
+        }
+        return host
     }
 }
 #endif

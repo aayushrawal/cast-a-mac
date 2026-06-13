@@ -3,23 +3,33 @@ import Foundation
 import IOKit.pwr_mgt
 
 final class HostPowerAssertion {
-    private var assertionID = IOPMAssertionID(kIOPMNullAssertionID)
+    private var assertionIDs: [IOPMAssertionID] = []
 
     init() throws {
-        let result = IOPMAssertionCreateWithName(
-            "PreventUserIdleDisplaySleep" as CFString,
-            IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            "Cast-a-mac is capturing the active display" as CFString,
-            &assertionID
-        )
-        guard result == kIOReturnSuccess else {
-            throw HostPowerAssertionError.creationFailed(result)
+        for assertionType in [
+            "PreventUserIdleDisplaySleep",
+            "PreventUserIdleSystemSleep"
+        ] {
+            var assertionID = IOPMAssertionID(kIOPMNullAssertionID)
+            let result = IOPMAssertionCreateWithName(
+                assertionType as CFString,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                "Cast-a-mac is streaming the active display" as CFString,
+                &assertionID
+            )
+            guard result == kIOReturnSuccess else {
+                assertionIDs.forEach { assertionID in
+                    _ = IOPMAssertionRelease(assertionID)
+                }
+                throw HostPowerAssertionError.creationFailed(result)
+            }
+            assertionIDs.append(assertionID)
         }
     }
 
     deinit {
-        if assertionID != IOPMAssertionID(kIOPMNullAssertionID) {
-            IOPMAssertionRelease(assertionID)
+        assertionIDs.forEach { assertionID in
+            _ = IOPMAssertionRelease(assertionID)
         }
     }
 }
