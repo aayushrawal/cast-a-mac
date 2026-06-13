@@ -33,7 +33,9 @@ final class ClientSessionModel: ObservableObject {
     private var connectionGeneration = UUID()
     private var lastFrameReceivedAt: Date?
     private var frameWatchdogTask: Task<Void, Never>?
+    private var connectionTimeoutTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
+    private var currentConnectionUsesRelay = false
 
     init() {
         rememberedMacs = rememberedStore.load()
@@ -118,6 +120,8 @@ final class ClientSessionModel: ObservableObject {
         connectionGeneration = UUID()
         frameWatchdogTask?.cancel()
         frameWatchdogTask = nil
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = nil
         receiver?.stop()
         receiver = nil
         decoder = nil
@@ -258,7 +262,13 @@ final class ClientSessionModel: ObservableObject {
         tearDownConnection()
         connectionState = .connecting(mac.name)
         let generation = connectionGeneration
+        currentConnectionUsesRelay = true
         lastFrameReceivedAt = Date()
+        startConnectionTimeout(
+            generation: generation,
+            macName: mac.name,
+            fallbackToRelay: false
+        )
 
         let decoder = H264Decoder { [weak self] pixelBuffer, _ in
             Task { @MainActor in
@@ -284,11 +294,16 @@ final class ClientSessionModel: ObservableObject {
                         return
                     }
                     if state.contains("ready") {
+                        self.connectionTimeoutTask?.cancel()
+                        self.connectionTimeoutTask = nil
                         self.connectionState = .connected(mac.name)
                         self.startFrameWatchdog(generation: generation)
                     } else if state.contains("failed")
                                 || state.contains("cancelled") {
-                        self.scheduleReconnect(generation: generation)
+                        self.failConnection(
+                            generation: generation,
+                            message: "Could not reach \(mac.name) over the internet."
+                        )
                     }
                 }
             }
@@ -296,7 +311,10 @@ final class ClientSessionModel: ObservableObject {
             self.receiver = receiver
             receiver.start()
         } catch {
-            scheduleReconnect(generation: generation)
+            failConnection(
+                generation: generation,
+                message: "Could not start the internet connection to \(mac.name)."
+            )
         }
     }
 
@@ -304,7 +322,13 @@ final class ClientSessionModel: ObservableObject {
         tearDownConnection()
         connectionState = .connecting(host.name)
         let generation = connectionGeneration
+        currentConnectionUsesRelay = false
         lastFrameReceivedAt = Date()
+        startConnectionTimeout(
+            generation: generation,
+            macName: host.name,
+            fallbackToRelay: true
+        )
 
         let decoder = H264Decoder { [weak self] pixelBuffer, _ in
             Task { @MainActor in
@@ -327,11 +351,16 @@ final class ClientSessionModel: ObservableObject {
                     return
                 }
                 if state.contains("ready") {
+                    self.connectionTimeoutTask?.cancel()
+                    self.connectionTimeoutTask = nil
                     self.connectionState = .connected(host.name)
                     self.startFrameWatchdog(generation: generation)
                 } else if state.contains("failed")
                             || state.contains("cancelled") {
-                    self.scheduleReconnect(generation: generation)
+                    self.fallbackFromLocalConnection(
+                        generation: generation,
+                        macName: host.name
+                    )
                 }
             }
         }
@@ -341,17 +370,20 @@ final class ClientSessionModel: ObservableObject {
         receiver.start()
     }
 
-    private func connectToActiveMac() {
+    private func connectToActiveMac(preferRelay: Bool = false) {
         guard let activeMacID, let activeMacName else {
             return
         }
-        if let localHost = hosts.first(where: {
+        let rememberedMac = rememberedMacs.first(where: {
+            $0.id == activeMacID
+        })
+        if !preferRelay, let localHost = hosts.first(where: {
             $0.hostID == activeMacID
         }) {
             connectLocally(to: localHost)
             return
         }
-        if let mac = rememberedMacs.first(where: { $0.id == activeMacID }),
+        if let mac = rememberedMac,
            let baseURL = mac.relayBaseURL,
            let accessToken = mac.relayAccessToken {
             connectOverRelay(
@@ -364,6 +396,69 @@ final class ClientSessionModel: ObservableObject {
         tearDownConnection()
         connectionState = .connecting(activeMacName)
         scheduleReconnect(generation: connectionGeneration)
+    }
+
+    private func startConnectionTimeout(
+        generation: UUID,
+        macName: String,
+        fallbackToRelay: Bool
+    ) {
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard !Task.isCancelled, let self,
+                  self.connectionGeneration == generation else {
+                return
+            }
+            self.connectionTimeoutTask = nil
+            if fallbackToRelay {
+                self.fallbackFromLocalConnection(
+                    generation: generation,
+                    macName: macName
+                )
+            } else {
+                self.failConnection(
+                    generation: generation,
+                    message: "Timed out connecting to \(macName) over the internet."
+                )
+            }
+        }
+    }
+
+    private func fallbackFromLocalConnection(
+        generation: UUID,
+        macName: String
+    ) {
+        guard connectionGeneration == generation,
+              let activeMacID,
+              let mac = rememberedMacs.first(where: {
+                  $0.id == activeMacID
+              }),
+              mac.relayBaseURL != nil,
+              mac.relayAccessToken != nil else {
+            failConnection(
+                generation: generation,
+                message: "Could not connect to \(macName) on the local network."
+            )
+            return
+        }
+        connectToActiveMac(preferRelay: true)
+    }
+
+    private func failConnection(generation: UUID, message: String) {
+        guard connectionGeneration == generation else {
+            return
+        }
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = nil
+        frameWatchdogTask?.cancel()
+        frameWatchdogTask = nil
+        receiver?.stop()
+        receiver = nil
+        decoder = nil
+        latestFrame = nil
+        lastFrameReceivedAt = nil
+        connectionState = .failed(message)
     }
 
     private func receivedFrame(
@@ -390,13 +485,19 @@ final class ClientSessionModel: ObservableObject {
                       Date().timeIntervalSince(lastFrameReceivedAt) > 8 else {
                     continue
                 }
-                self.scheduleReconnect(generation: generation)
+                self.scheduleReconnect(
+                    generation: generation,
+                    preferRelay: self.currentConnectionUsesRelay
+                )
                 return
             }
         }
     }
 
-    private func scheduleReconnect(generation: UUID) {
+    private func scheduleReconnect(
+        generation: UUID,
+        preferRelay: Bool = false
+    ) {
         guard connectionGeneration == generation,
               activeMacID != nil,
               reconnectTask == nil else {
@@ -418,7 +519,7 @@ final class ClientSessionModel: ObservableObject {
                 return
             }
             self.reconnectTask = nil
-            self.connectToActiveMac()
+            self.connectToActiveMac(preferRelay: preferRelay)
         }
     }
 }

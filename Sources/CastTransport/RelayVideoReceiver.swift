@@ -43,14 +43,18 @@ public final class RelayVideoReceiver: @unchecked Sendable {
         receiveTask = Task { [weak self] in
             guard let self else { return }
             do {
-                try await task.send(.string("ready"))
-                onStateChange?("relay: ready")
+                var receivedMedia = false
                 while !Task.isCancelled {
                     let message = try await task.receive()
                     guard case let .data(data) = message else {
                         continue
                     }
-                    packetHandler(try MediaPacketCodec.decode(data))
+                    let packet = try MediaPacketCodec.decode(data)
+                    if !receivedMedia {
+                        receivedMedia = true
+                        onStateChange?("relay: ready")
+                    }
+                    packetHandler(packet)
                 }
             } catch {
                 onStateChange?("relay: failed \(error.localizedDescription)")
