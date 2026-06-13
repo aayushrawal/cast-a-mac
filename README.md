@@ -170,6 +170,37 @@ npm install
 RELAY_TOKEN_SECRET="$(openssl rand -hex 32)" npm start
 ```
 
+Or run the development relay in Docker:
+
+```sh
+docker build -t cast-a-mac-relay RelayServer
+docker volume create cast-a-mac-relay-data
+docker run -d --name cast-a-mac-relay --restart unless-stopped \
+  -p 8080:8080 \
+  -e RELAY_TOKEN_SECRET="$(openssl rand -hex 32)" \
+  -e DATA_FILE=/data/relay-data.json \
+  -v cast-a-mac-relay-data:/data \
+  cast-a-mac-relay
+```
+
+Devices on the same LAN can use `http://<mac-hostname>.local:8080` while
+testing. This is not an internet-accessible deployment and must not be exposed
+directly without TLS and appropriate firewall controls.
+
+For a temporary different-network test, place an HTTPS tunnel in front of the
+Docker relay:
+
+```sh
+docker run -d --name cast-a-mac-relay-tunnel \
+  cloudflare/cloudflared:latest tunnel --no-autoupdate \
+  --url http://host.docker.internal:8080
+docker logs cast-a-mac-relay-tunnel
+```
+
+Use the generated `https://*.trycloudflare.com` URL in both apps. Quick-tunnel
+URLs are temporary and can change when the tunnel container is recreated, so
+they are suitable only for development testing.
+
 For internet use, deploy `RelayServer` behind a stable HTTPS URL. WebSocket
 support must be enabled, `RELAY_TOKEN_SECRET` must remain stable across
 deployments, and the service must use one instance unless the in-memory
