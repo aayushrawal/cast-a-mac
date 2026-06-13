@@ -62,6 +62,10 @@ let package = Package(
         .testTarget(
             name: "CastMediaTests",
             dependencies: ["CastMedia"]
+        ),
+        .testTarget(
+            name: "CastTransportTests",
+            dependencies: ["CastTransport"]
         )
     ]
 )

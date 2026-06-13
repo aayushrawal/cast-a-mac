@@ -21,15 +21,18 @@ public struct RelayCoordinationClient: Sendable {
               (200..<300).contains(httpResponse.statusCode) else {
             throw RelayCoordinationError.linkFailed
         }
-        let linked = try JSONDecoder().decode(
-            RelayLinkResponse.self,
-            from: data
-        )
+        let linked = try Self.decodeLinkResponse(data)
         return RelayClientCredential(
             baseURL: baseURL,
             host: linked.host,
             accessToken: linked.accessToken
         )
+    }
+
+    static func decodeLinkResponse(_ data: Data) throws -> RelayLinkResponse {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(RelayLinkResponse.self, from: data)
     }
 }
 
