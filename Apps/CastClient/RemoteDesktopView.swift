@@ -181,12 +181,18 @@ private struct RemoteInputOverlay: UIViewRepresentable {
             target: context.coordinator,
             action: #selector(Coordinator.tap(_:))
         )
+        tap.allowedTouchTypes = [
+            NSNumber(value: UITouch.TouchType.direct.rawValue)
+        ]
         let drag = UIPanGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.drag(_:))
         )
         drag.minimumNumberOfTouches = 1
         drag.maximumNumberOfTouches = 1
+        drag.allowedTouchTypes = [
+            NSNumber(value: UITouch.TouchType.direct.rawValue)
+        ]
         let scrollGesture = UIPanGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.scroll(_:))
@@ -194,6 +200,9 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         scrollGesture.minimumNumberOfTouches = 2
         scrollGesture.maximumNumberOfTouches = 2
         scrollGesture.requiresExclusiveTouchType = true
+        scrollGesture.allowedTouchTypes = [
+            NSNumber(value: UITouch.TouchType.direct.rawValue)
+        ]
         let threeFingerSwipe = UIPanGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.threeFingerSwipe(_:))
@@ -201,28 +210,73 @@ private struct RemoteInputOverlay: UIViewRepresentable {
         threeFingerSwipe.minimumNumberOfTouches = 3
         threeFingerSwipe.maximumNumberOfTouches = 3
         threeFingerSwipe.requiresExclusiveTouchType = true
+        threeFingerSwipe.allowedTouchTypes = [
+            NSNumber(value: UITouch.TouchType.direct.rawValue)
+        ]
         let rightClick = UILongPressGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.rightClick(_:))
         )
         rightClick.minimumPressDuration = 0.45
+        rightClick.allowedTouchTypes = [
+            NSNumber(value: UITouch.TouchType.direct.rawValue)
+        ]
+        let pointerClick = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.tap(_:))
+        )
+        pointerClick.allowedTouchTypes = [
+            NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
+        ]
+        pointerClick.buttonMaskRequired = .primary
+        let pointerRightClick = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.pointerRightClick(_:))
+        )
+        pointerRightClick.allowedTouchTypes = [
+            NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
+        ]
+        pointerRightClick.buttonMaskRequired = .secondary
+        let pointerDrag = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.drag(_:))
+        )
+        pointerDrag.minimumNumberOfTouches = 1
+        pointerDrag.maximumNumberOfTouches = 1
+        pointerDrag.allowedTouchTypes = [
+            NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
+        ]
+        let trackpadScroll = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.trackpadScroll(_:))
+        )
+        trackpadScroll.allowedScrollTypesMask = [.continuous, .discrete]
         let hover = UIHoverGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.hover(_:))
         )
 
         tap.require(toFail: drag)
+        pointerClick.require(toFail: pointerDrag)
         tap.delegate = context.coordinator
         drag.delegate = context.coordinator
         scrollGesture.delegate = context.coordinator
         threeFingerSwipe.delegate = context.coordinator
         rightClick.delegate = context.coordinator
+        pointerClick.delegate = context.coordinator
+        pointerRightClick.delegate = context.coordinator
+        pointerDrag.delegate = context.coordinator
+        trackpadScroll.delegate = context.coordinator
         context.coordinator.setGestureView(view)
         view.addGestureRecognizer(tap)
         view.addGestureRecognizer(drag)
         view.addGestureRecognizer(scrollGesture)
         view.addGestureRecognizer(threeFingerSwipe)
         view.addGestureRecognizer(rightClick)
+        view.addGestureRecognizer(pointerClick)
+        view.addGestureRecognizer(pointerRightClick)
+        view.addGestureRecognizer(pointerDrag)
+        view.addGestureRecognizer(trackpadScroll)
         view.addGestureRecognizer(hover)
         return view
     }
@@ -287,6 +341,15 @@ private struct RemoteInputOverlay: UIViewRepresentable {
             parent.scroll(delta.x * 3, delta.y * 3)
         }
 
+        @objc func trackpadScroll(_ recognizer: UIPanGestureRecognizer) {
+            guard recognizer.state == .changed else {
+                return
+            }
+            let delta = recognizer.translation(in: recognizer.view)
+            recognizer.setTranslation(.zero, in: recognizer.view)
+            parent.scroll(delta.x, delta.y)
+        }
+
         @objc func threeFingerSwipe(_ recognizer: UIPanGestureRecognizer) {
             switch recognizer.state {
             case .began:
@@ -325,11 +388,28 @@ private struct RemoteInputOverlay: UIViewRepresentable {
             parent.rightClick(point.x, point.y)
         }
 
+        @objc func pointerRightClick(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  let point = normalizedPoint(
+                      recognizer.location(in: recognizer.view)
+                  ) else {
+                return
+            }
+            parent.rightClick(point.x, point.y)
+        }
+
         @objc func hover(_ recognizer: UIHoverGestureRecognizer) {
             guard recognizer.state == .began || recognizer.state == .changed else {
                 return
             }
-            _ = reportCornerActivity(at: recognizer.location(in: recognizer.view))
+            let location = recognizer.location(in: recognizer.view)
+            if reportCornerActivity(at: location) {
+                return
+            }
+            guard let point = normalizedPoint(location) else {
+                return
+            }
+            parent.movePointer(point.x, point.y)
         }
 
         @discardableResult

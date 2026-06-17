@@ -35,6 +35,8 @@ public final class H264Decoder: @unchecked Sendable {
             try configure(sps: sps, pps: pps)
         case let .videoFrame(data, timestamp, _):
             try decode(data: data, presentationTimeNanoseconds: timestamp)
+        case .heartbeat:
+            break
         }
     }
 

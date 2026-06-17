@@ -17,6 +17,7 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
     private var encoder: H264Encoder?
     private var inputController: RemoteInputController?
     private var powerAssertion: HostPowerAssertion?
+    private var heartbeatTask: Task<Void, Never>?
     private let stateLock = NSLock()
     private var isStopping = false
 
@@ -111,6 +112,7 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
 
         broadcaster.start()
         relay?.start()
+        startHeartbeat()
         try await stream.startCapture()
         print(
             "Capturing display \(display.displayID) at "
@@ -128,6 +130,8 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
         } catch {
             stopError = error
         }
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
         broadcaster.stop()
         relay?.stop()
         stream = nil
@@ -185,6 +189,25 @@ public final class ScreenCaptureHost: NSObject, SCStreamOutput, SCStreamDelegate
         let outputWidth = max(2, Int(Double(width) * scale) & ~1)
         let outputHeight = max(2, Int(Double(height) * scale) & ~1)
         return (outputWidth, outputHeight)
+    }
+
+    private func startHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled, let self else {
+                    return
+                }
+                let packet = MediaPacket.heartbeat(
+                    sentAtNanoseconds: Int64(
+                        Date.timeIntervalSinceReferenceDate * 1_000_000_000
+                    )
+                )
+                self.broadcaster.broadcast(packet)
+                self.relay?.broadcast(packet)
+            }
+        }
     }
 }
 

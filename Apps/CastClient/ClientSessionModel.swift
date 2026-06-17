@@ -32,6 +32,7 @@ final class ClientSessionModel: ObservableObject {
     private var activeMacName: String?
     private var connectionGeneration = UUID()
     private var lastFrameReceivedAt: Date?
+    private var lastPacketReceivedAt: Date?
     private var frameWatchdogTask: Task<Void, Never>?
     private var connectionTimeoutTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
@@ -126,6 +127,7 @@ final class ClientSessionModel: ObservableObject {
         receiver = nil
         decoder = nil
         lastFrameReceivedAt = nil
+        lastPacketReceivedAt = nil
         latestFrame = nil
     }
 
@@ -264,6 +266,7 @@ final class ClientSessionModel: ObservableObject {
         let generation = connectionGeneration
         currentConnectionUsesRelay = true
         lastFrameReceivedAt = Date()
+        lastPacketReceivedAt = Date()
         startConnectionTimeout(
             generation: generation,
             macName: mac.name,
@@ -280,8 +283,14 @@ final class ClientSessionModel: ObservableObject {
                 baseURL: baseURL,
                 hostID: mac.id,
                 accessToken: accessToken
-            ) { [weak decoder] packet in
+            ) { [weak self, weak decoder] packet in
                 do {
+                    Task { @MainActor in
+                        self?.receivedPacket(generation: generation)
+                    }
+                    if case .heartbeat = packet {
+                        return
+                    }
                     try decoder?.consume(packet)
                 } catch {
                     print("Relay decode failed: \(error)")
@@ -324,6 +333,7 @@ final class ClientSessionModel: ObservableObject {
         let generation = connectionGeneration
         currentConnectionUsesRelay = false
         lastFrameReceivedAt = Date()
+        lastPacketReceivedAt = Date()
         startConnectionTimeout(
             generation: generation,
             macName: host.name,
@@ -337,8 +347,14 @@ final class ClientSessionModel: ObservableObject {
         }
         let receiver = LANVideoReceiver(
             endpoint: host.endpoint
-        ) { [weak decoder] packet in
+        ) { [weak self, weak decoder] packet in
             do {
+                Task { @MainActor in
+                    self?.receivedPacket(generation: generation)
+                }
+                if case .heartbeat = packet {
+                    return
+                }
                 try decoder?.consume(packet)
             } catch {
                 print("Decode failed: \(error)")
@@ -458,7 +474,15 @@ final class ClientSessionModel: ObservableObject {
         decoder = nil
         latestFrame = nil
         lastFrameReceivedAt = nil
+        lastPacketReceivedAt = nil
         connectionState = .failed(message)
+    }
+
+    private func receivedPacket(generation: UUID) {
+        guard connectionGeneration == generation else {
+            return
+        }
+        lastPacketReceivedAt = Date()
     }
 
     private func receivedFrame(
@@ -470,6 +494,7 @@ final class ClientSessionModel: ObservableObject {
         }
         latestFrame = pixelBuffer
         lastFrameReceivedAt = Date()
+        lastPacketReceivedAt = Date()
     }
 
     private func startFrameWatchdog(generation: UUID) {
@@ -481,8 +506,8 @@ final class ClientSessionModel: ObservableObject {
                       self.connectionGeneration == generation else {
                     return
                 }
-                guard let lastFrameReceivedAt = self.lastFrameReceivedAt,
-                      Date().timeIntervalSince(lastFrameReceivedAt) > 8 else {
+                guard let lastPacketReceivedAt = self.lastPacketReceivedAt,
+                      Date().timeIntervalSince(lastPacketReceivedAt) > 8 else {
                     continue
                 }
                 self.scheduleReconnect(
@@ -510,6 +535,7 @@ final class ClientSessionModel: ObservableObject {
         decoder = nil
         latestFrame = nil
         lastFrameReceivedAt = nil
+        lastPacketReceivedAt = nil
         connectionState = .connecting(activeMacName ?? "Mac")
 
         reconnectTask = Task { [weak self] in

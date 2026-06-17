@@ -3,6 +3,7 @@ import Foundation
 public enum MediaPacket: Equatable, Sendable {
     case videoConfiguration(sps: Data, pps: Data)
     case videoFrame(data: Data, presentationTimeNanoseconds: Int64, isKeyFrame: Bool)
+    case heartbeat(sentAtNanoseconds: Int64)
 }
 
 public enum MediaPacketCodecError: Error, Equatable {
@@ -44,6 +45,11 @@ public enum MediaPacketCodec {
             flags = isKeyFrame ? 1 : 0
             timestamp = presentationTimeNanoseconds
             payload = data
+        case let .heartbeat(sentAtNanoseconds):
+            kind = 3
+            flags = 0
+            timestamp = sentAtNanoseconds
+            payload = Data()
         }
 
         guard payload.count <= maximumPayloadLength else {
@@ -106,6 +112,11 @@ public enum MediaPacketCodec {
                 presentationTimeNanoseconds: Int64(bitPattern: timestampBits),
                 isKeyFrame: flags & 1 == 1
             )
+        case 3:
+            guard payload.isEmpty else {
+                throw MediaPacketCodecError.invalidPacket
+            }
+            return .heartbeat(sentAtNanoseconds: Int64(bitPattern: timestampBits))
         default:
             throw MediaPacketCodecError.invalidPacket
         }

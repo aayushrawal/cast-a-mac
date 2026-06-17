@@ -24,6 +24,13 @@ func videoFrameRoundTrips() throws {
 }
 
 @Test
+func heartbeatRoundTrips() throws {
+    let packet = MediaPacket.heartbeat(sentAtNanoseconds: 123_456_789)
+
+    #expect(try MediaPacketCodec.decode(MediaPacketCodec.encode(packet)) == packet)
+}
+
+@Test
 func framerHandlesSplitAndCombinedPackets() throws {
     let first = try MediaPacketCodec.encode(
         .videoConfiguration(sps: Data([1, 2]), pps: Data([3]))
